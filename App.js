@@ -1,240 +1,420 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Modal, TouchableOpacity, Text, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Modal, TouchableOpacity, Text, Switch, Dimensions } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { Appbar, TextInput, Button, Card, RadioButton, Provider as PaperProvider, Switch, Chip, ProgressBar, Divider } from 'react-native-paper';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Appbar, TextInput, Button, Card, Chip, IconButton, Portal, Dialog, List } from 'react-native-paper';
 
 export default function App() {
-  const webViewRef = useRef(null);
-  const [currentUrl, setCurrentUrl] = useState('https://google.com');
-  const [urlInput, setUrlInput] = useState('https://google.com');
-  const [showUASelector, setShowUASelector] = useState(false);
-  const [selectedUA, setSelectedUA] = useState('');
-  const [selectedLanguage, setSelectedLanguage] = useState('en-US');
-  const [isLoading, setIsLoading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  
-  // NUEVOS ESTADOS PARA MEJORAS
-  const [darkMode, setDarkMode] = useState(false);
-  const [incognitoMode, setIncognitoMode] = useState(false);
-  const [tabs, setTabs] = useState([{ id: 1, url: 'https://google.com', title: 'Google' }]);
-  const [activeTab, setActiveTab] = useState(1);
-  const [showProxyConfig, setShowProxyConfig] = useState(false);
-  const [proxyConfig, setProxyConfig] = useState({ host: '', port: '', enabled: false });
+  // ==================== ESTADO DE PESTAÑAS ====================
+  const [tabs, setTabs] = useState([
+    { 
+      id: 1, 
+      url: 'https://google.com', 
+      title: 'Google',
+      isSecure: true,
+      webViewRef: useRef(null)
+    }
+  ]);
+  const [activeTabId, setActiveTabId] = useState(1);
+  const [showTabSelector, setShowTabSelector] = useState(false);
 
-  // USER-AGENTS database
+  // ==================== ESTADO DE NAVEGACIÓN ====================
+  const [urlInput, setUrlInput] = useState('https://google.com');
+  const [currentUrl, setCurrentUrl] = useState('https://google.com');
+  const [isLoading, setIsLoading] = useState(false);
+
+  // ==================== ESTADO DE CONFIGURACIÓN ====================
+  const [showSettings, setShowSettings] = useState(false);
+  const [autoRotateUA, setAutoRotateUA] = useState(false);
+  const [rotationInterval, setRotationInterval] = useState(5); // minutos
+  const [currentUA, setCurrentUA] = useState('');
+  const [currentLang, setCurrentLang] = useState('es-ES');
+
+  // ==================== USER-AGENTS DATABASE ====================
   const userAgents = {
     desktop: [
-      { 
-        name: "Windows 10 - Chrome", 
-        value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        resolution: "1920x1080"
-      },
-      { 
-        name: "Windows 7/10 - IE 11", 
-        value: "Mozilla/5.0 (Windows NT 10.0; Trident/7.0; rv:11.0) like Gecko",
-        resolution: "1366x768"
-      },
-      { 
-        name: "macOS - Chrome", 
-        value: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-        resolution: "1440x900"
-      },
-      { 
-        name: "macOS - Safari", 
-        value: "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Safari/605.1.15",
-        resolution: "1440x900"
-      },
-      { 
-        name: "Linux - Chrome", 
-        value: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        resolution: "1366x768"
-      }
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Safari/605.1.15"
     ],
     mobile: [
-      { 
-        name: "Android Phone - Chrome", 
-        value: "Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-        resolution: "412x915"
-      },
-      { 
-        name: "Android Tablet", 
-        value: "Mozilla/5.0 (Linux; Android 11; SM-T870) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-        resolution: "800x1280"
-      },
-      { 
-        name: "iPhone - Safari", 
-        value: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-        resolution: "390x844"
-      },
-      { 
-        name: "iPad - Safari", 
-        value: "Mozilla/5.0 (iPad; CPU OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
-        resolution: "834x1194"
-      }
+      "Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+      "Mozilla/5.0 (Linux; Android 11; SM-T870) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+      "Mozilla/5.0 (iPad; CPU OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
     ]
   };
 
-  // IDIOMAS
-  const languageProfiles = {
-    "en-US": "English (US)",
-    "es-ES": "Español (ES)", 
-    "fr-FR": "Français (FR)",
-    "de-DE": "Deutsch (DE)",
-    "ja-JP": "日本語 (JP)",
-    "pt-BR": "Português (BR)"
+  // ==================== SOLO 2 IDIOMAS ====================
+  const languages = {
+    "es-ES": "🇪🇸 Español",
+    "en-US": "🇺🇸 English"
   };
 
-  // Cargar configuración guardada
+  // ==================== BLOQUEO DE TRAKERS ====================
+  const trackerBlockList = [
+    'google-analytics.com',
+    'googletagmanager.com',
+    'facebook.com/tr',
+    'doubleclick.net',
+    'googlesyndication.com',
+    'scorecardresearch.com',
+    'hotjar.com'
+  ];
+
+  const allUserAgents = [...userAgents.desktop, ...userAgents.mobile];
+
+  // ==================== PROTECCIÓN ANTI-FINGERPRINTING ====================
+  const antiFingerprintingJS = `
+    // Bloquear canvas fingerprinting
+    (function() {
+      const originalGetContext = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function() {
+        const context = originalGetContext.apply(this, arguments);
+        if (context) {
+          const originalFillText = context.fillText;
+          const originalStrokeText = context.strokeText;
+          const originalGetImageData = context.getImageData;
+          const originalToDataURL = context.canvas.toDataURL;
+          
+          context.fillText = function() {
+            return originalFillText.apply(this, arguments);
+          };
+          context.strokeText = function() {
+            return originalStrokeText.apply(this, arguments);
+          };
+          context.getImageData = function() {
+            return originalGetImageData.apply(this, arguments);
+          };
+          context.canvas.toDataURL = function() {
+            return originalToDataURL.apply(this, arguments);
+          };
+        }
+        return context;
+      };
+    })();
+
+    // Randomizar valores de pantalla
+    const randomValues = {
+      width: Math.random() > 0.5 ? 1920 : 1366,
+      height: Math.random() > 0.5 ? 1080 : 768,
+      colorDepth: Math.random() > 0.5 ? 24 : 32,
+      pixelDepth: Math.random() > 0.5 ? 24 : 32
+    };
+
+    Object.defineProperty(screen, 'width', { 
+      get: () => randomValues.width,
+      configurable: true
+    });
+    Object.defineProperty(screen, 'height', { 
+      get: () => randomValues.height,
+      configurable: true
+    });
+    Object.defineProperty(screen, 'availWidth', { 
+      get: () => randomValues.width,
+      configurable: true
+    });
+    Object.defineProperty(screen, 'availHeight', { 
+      get: () => randomValues.height,
+      configurable: true
+    });
+    Object.defineProperty(screen, 'colorDepth', { 
+      get: () => randomValues.colorDepth,
+      configurable: true
+    });
+    Object.defineProperty(screen, 'pixelDepth', { 
+      get: () => randomValues.pixelDepth,
+      configurable: true
+    });
+
+    // Bloquear WebGL fingerprinting
+    if (typeof WebGLRenderingContext !== 'undefined') {
+      const originalGetParameter = WebGLRenderingContext.prototype.getParameter;
+      WebGLRenderingContext.prototype.getParameter = function(parameter) {
+        if (parameter === 37445) return "Intel Inc.";
+        if (parameter === 37446) return "Intel Iris OpenGL Engine";
+        return originalGetParameter.call(this, parameter);
+      };
+    }
+
+    // Bloquear audio fingerprinting
+    if (typeof AudioContext !== 'undefined') {
+      const originalCreateOscillator = AudioContext.prototype.createOscillator;
+      AudioContext.prototype.createOscillator = function() {
+        const oscillator = originalCreateOscillator.call(this);
+        const originalFrequency = oscillator.frequency;
+        Object.defineProperty(oscillator.frequency, 'value', {
+          get: () => 440,
+          set: () => {}
+        });
+        return oscillator;
+      };
+    }
+
+    // Bloquear font fingerprinting
+    const originalMeasureText = CanvasRenderingContext2D.prototype.measureText;
+    CanvasRenderingContext2D.prototype.measureText = function(text) {
+      const metrics = originalMeasureText.call(this, text);
+      metrics.width = Math.round(metrics.width);
+      return metrics;
+    };
+
+    true;
+  `;
+
+  // ==================== INICIALIZAR ====================
   useEffect(() => {
-    loadSavedSettings();
+    rotateIdentity();
   }, []);
 
-  const loadSavedSettings = async () => {
-    try {
-      const savedUA = await AsyncStorage.getItem('selectedUA');
-      const savedLang = await AsyncStorage.getItem('selectedLanguage');
-      const savedDarkMode = await AsyncStorage.getItem('darkMode');
-      const savedProxy = await AsyncStorage.getItem('proxyConfig');
-      
-      if (savedUA) setSelectedUA(savedUA);
-      if (savedLang) setSelectedLanguage(savedLang);
-      if (savedDarkMode) setDarkMode(JSON.parse(savedDarkMode));
-      if (savedProxy) setProxyConfig(JSON.parse(savedProxy));
-    } catch (error) {
-      console.log('Error loading settings:', error);
-    }
-  };
-
-  // Navegar a URL
-  const navigate = () => {
-    let url = urlInput.trim();
-    if (!url.startsWith('http')) {
-      url = 'https://' + url;
-    }
-    setCurrentUrl(url);
-    setUrlInput(url);
+  // ==================== AUTO-ROTACIÓN ====================
+  useEffect(() => {
+    if (!autoRotateUA) return;
     
-    // Actualizar pestaña activa
-    const updatedTabs = tabs.map(tab => 
-      tab.id === activeTab ? { ...tab, url: url, title: 'Cargando...' } : tab
-    );
-    setTabs(updatedTabs);
+    const timer = setInterval(() => {
+      rotateIdentity();
+      console.log('🔄 User-Agent e idioma rotados');
+    }, rotationInterval * 60 * 1000);
+
+    return () => clearInterval(timer);
+  }, [autoRotateUA, rotationInterval]);
+
+  // ==================== ROTAR IDENTIDAD ====================
+  const rotateIdentity = () => {
+    const randomUA = allUserAgents[Math.floor(Math.random() * allUserAgents.length)];
+    const langKeys = Object.keys(languages);
+    const randomLang = langKeys[Math.floor(Math.random() * langKeys.length)];
+    
+    setCurrentUA(randomUA);
+    setCurrentLang(randomLang);
+    
+    // Recargar pestaña activa con nuevo User-Agent
+    const activeTab = tabs.find(t => t.id === activeTabId);
+    if (activeTab?.webViewRef?.current) {
+      activeTab.webViewRef.current.reload();
+    }
   };
 
-  // Agregar nueva pestaña
-  const addNewTab = () => {
-    const newTabId = Date.now();
-    const newTab = { id: newTabId, url: 'https://google.com', title: 'Nueva pestaña' };
+  // ==================== VERIFICAR SI URL ES TRAKER ====================
+  const isTrackerUrl = (url) => {
+    return trackerBlockList.some(tracker => url.includes(tracker));
+  };
+
+  // ==================== OBTENER PESTAÑA ACTIVA ====================
+  const activeTab = tabs.find(t => t.id === activeTabId);
+
+  // ==================== CREAR NUEVA PESTAÑA ====================
+  const createTab = () => {
+    const newTab = {
+      id: Date.now(),
+      url: 'https://google.com',
+      title: 'Nueva pestaña',
+      isSecure: true,
+      webViewRef: React.createRef()
+    };
     setTabs([...tabs, newTab]);
-    setActiveTab(newTabId);
-    setCurrentUrl('https://google.com');
+    setActiveTabId(newTab.id);
     setUrlInput('https://google.com');
+    setCurrentUrl('https://google.com');
   };
 
-  // Cerrar pestaña
+  // ==================== CERRAR PESTAÑA ====================
   const closeTab = (tabId) => {
     if (tabs.length === 1) {
-      Alert.alert('No se puede cerrar', 'Debe haber al menos una pestaña abierta');
+      // Si es la última pestaña, limpiar y crear nueva
+      clearTabData(tabId);
+      setUrlInput('https://google.com');
+      setCurrentUrl('https://google.com');
+      setTabs([{
+        id: Date.now(),
+        url: 'https://google.com',
+        title: 'Nueva pestaña',
+        isSecure: true,
+        webViewRef: React.createRef()
+      }]);
+      setActiveTabId(Date.now());
       return;
     }
     
-    const filteredTabs = tabs.filter(tab => tab.id !== tabId);
-    setTabs(filteredTabs);
+    // Limpiar datos de la pestaña
+    clearTabData(tabId);
     
-    if (activeTab === tabId) {
-      setActiveTab(filteredTabs[0].id);
-      setCurrentUrl(filteredTabs[0].url);
-      setUrlInput(filteredTabs[0].url);
+    const newTabs = tabs.filter(t => t.id !== tabId);
+    setTabs(newTabs);
+    
+    if (activeTabId === tabId) {
+      const newActiveTab = newTabs[0];
+      setActiveTabId(newActiveTab.id);
+      setUrlInput(newActiveTab.url);
+      setCurrentUrl(newActiveTab.url);
     }
   };
 
-  // Cambiar entre pestañas
+  // ==================== LIMPIAR DATOS DE PESTAÑA ====================
+  const clearTabData = (tabId) => {
+    const tab = tabs.find(t => t.id === tabId);
+    if (tab?.webViewRef?.current) {
+      // Limpiar cookies y caché
+      tab.webViewRef.current.injectJavaScript(`
+        // Limpiar cookies
+        document.cookie.split(";").forEach(function(c) { 
+          document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+        });
+        // Limpiar localStorage
+        localStorage.clear();
+        // Limpiar sessionStorage
+        sessionStorage.clear();
+        // Limpiar indexedDB
+        if (window.indexedDB) {
+          indexedDB.databases().then(function(databases) {
+            databases.forEach(function(db) {
+              indexedDB.deleteDatabase(db.name);
+            });
+          });
+        }
+        true;
+      `);
+    }
+  };
+
+  // ==================== CAMBIAR PESTAÑA ACTIVA ====================
   const switchTab = (tabId) => {
     const tab = tabs.find(t => t.id === tabId);
-    if (tab) {
-      setActiveTab(tabId);
-      setCurrentUrl(tab.url);
-      setUrlInput(tab.url);
-    }
+    setActiveTabId(tabId);
+    setUrlInput(tab.url);
+    setCurrentUrl(tab.url);
+    setShowTabSelector(false);
   };
 
-  // Aplicar User-Agent
-  const applyUserAgent = async (ua) => {
-    setSelectedUA(ua);
-    await AsyncStorage.setItem('selectedUA', ua);
-    setShowUASelector(false);
+  // ==================== NAVEGAR A URL ====================
+  const navigate = () => {
+    let url = urlInput.trim();
     
-    if (webViewRef.current) {
-      webViewRef.current.reload();
-    }
-  };
-
-  // Aplicar Idioma
-  const applyLanguage = async (lang) => {
-    setSelectedLanguage(lang);
-    await AsyncStorage.setItem('selectedLanguage', lang);
+    // Si está vacío, no hacer nada
+    if (!url) return;
     
-    if (webViewRef.current) {
-      webViewRef.current.reload();
+    // Si es un tracker, bloquear
+    if (isTrackerUrl(url)) {
+      alert('🚫 Esta URL ha sido bloqueada por protección de privacidad');
+      return;
     }
-  };
-
-  // Toggle Modo Oscuro
-  const toggleDarkMode = async () => {
-    const newDarkMode = !darkMode;
-    setDarkMode(newDarkMode);
-    await AsyncStorage.setItem('darkMode', JSON.stringify(newDarkMode));
-  };
-
-  // Toggle Modo Incógnito
-  const toggleIncognitoMode = () => {
-    setIncognitoMode(!incognitoMode);
-    if (!incognitoMode) {
-      Alert.alert('Modo Incógnito', 'No se guardará el historial ni cookies en esta sesión');
-    }
-  };
-
-  // Configurar Proxy
-  const saveProxyConfig = async () => {
-    await AsyncStorage.setItem('proxyConfig', JSON.stringify(proxyConfig));
-    setShowProxyConfig(false);
-    Alert.alert('Proxy Configurado', 'La configuración se ha guardado');
-  };
-
-  // Reset configuración
-  const resetSettings = async () => {
-    setSelectedUA('');
-    setSelectedLanguage('en-US');
-    setDarkMode(false);
-    setProxyConfig({ host: '', port: '', enabled: false });
-    await AsyncStorage.multiRemove(['selectedUA', 'selectedLanguage', 'darkMode', 'proxyConfig']);
     
-    if (webViewRef.current) {
-      webViewRef.current.reload();
+    // Si no tiene punto y no es http, buscar en Google
+    if (!url.includes('.') && !url.startsWith('http')) {
+      url = `https://www.google.com/search?q=${encodeURIComponent(url)}`;
+    } 
+    // Si no empieza con http, agregar https://
+    else if (!url.startsWith('http')) {
+      url = 'https://' + url;
     }
+    
+    const isSecure = url.startsWith('https://');
+    
+    setCurrentUrl(url);
+    setTabs(tabs.map(t => 
+      t.id === activeTabId 
+        ? { ...t, url, isSecure }
+        : t
+    ));
   };
 
-  // Tema dinámico
-  const theme = {
-    colors: {
-      primary: darkMode ? '#bb86fc' : '#4f46e5',
-      background: darkMode ? '#121212' : '#ffffff',
-      surface: darkMode ? '#1e1e1e' : '#ffffff',
-      text: darkMode ? '#ffffff' : '#000000',
+  // ==================== ACTUALIZAR URL MIENTRAS NAVEGAS ====================
+  const handleNavigationStateChange = (navState) => {
+    const { url, title } = navState;
+    
+    // Bloquear trackers
+    if (isTrackerUrl(url)) {
+      alert('🚫 Tracker bloqueado: ' + new URL(url).hostname);
+      return;
     }
+    
+    const isSecure = url.startsWith('https://');
+    
+    setCurrentUrl(url);
+    setUrlInput(url);
+    
+    setTabs(tabs.map(t => 
+      t.id === activeTabId 
+        ? { ...t, url, title: title || new URL(url).hostname, isSecure }
+        : t
+    ));
+  };
+
+  // ==================== LIMPIAR TODO ====================
+  const clearEverything = () => {
+    // Limpiar todas las pestañas
+    tabs.forEach(tab => clearTabData(tab.id));
+    
+    // Crear pestaña limpia
+    setTabs([{
+      id: Date.now(),
+      url: 'https://google.com',
+      title: 'Nueva pestaña',
+      isSecure: true,
+      webViewRef: React.createRef()
+    }]);
+    setActiveTabId(Date.now());
+    setUrlInput('https://google.com');
+    setCurrentUrl('https://google.com');
+    
+    // Rotar identidad
+    rotateIdentity();
+    
+    alert('🧹 Todos los datos han sido eliminados permanentemente');
+    setShowSettings(false);
+  };
+
+  // ==================== JAVASCRIPT COMPLETO PARA INYECTAR ====================
+  const getInjectedJavaScript = () => {
+    return `
+      ${antiFingerprintingJS}
+      
+      // Inyectar idioma
+      Object.defineProperty(navigator, 'language', {
+        get: function() { return '${currentLang}'; },
+        configurable: true
+      });
+      Object.defineProperty(navigator, 'languages', {
+        get: function() { return ['${currentLang}', '${currentLang.split('-')[0]}']; },
+        configurable: true
+      });
+      
+      // Limpiar datos al cargar
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      // Bloquear request a trackers
+      const originalFetch = window.fetch;
+      window.fetch = function(...args) {
+        const url = args[0];
+        if (typeof url === 'string' && ${JSON.stringify(trackerBlockList)}.some(tracker => url.includes(tracker))) {
+          console.log('🚫 Tracker bloqueado:', url);
+          return Promise.reject(new Error('Tracker bloqueado'));
+        }
+        return originalFetch.apply(this, args);
+      };
+      
+      true;
+    `;
   };
 
   return (
-    <PaperProvider theme={theme}>
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <View style={styles.container}>
+      
+      {/* ==================== HEADER CON PESTAÑAS ==================== */}
+      <Appbar.Header style={styles.header}>
+        <Appbar.Action 
+          icon="menu" 
+          onPress={() => setShowSettings(true)} 
+        />
         
-        {/* HEADER MEJORADO */}
-        <Appbar.Header style={{ backgroundColor: darkMode ? '#1e1e1e' : '#4f46e5' }}>
-          <Appbar.Action 
-            icon="menu" 
-            color="white"
-            onPress={() => setShowUASelector(true)} 
+        {/* BARRA DE URL CON ICONO DE SEGURIDAD */}
+        <View style={styles.urlContainer}>
+          <IconButton
+            icon={activeTab?.isSecure ? "lock" : "lock-open"}
+            size={16}
+            iconColor={activeTab?.isSecure ? "#4CAF50" : "#FFC107"}
           />
           
           <TextInput
@@ -242,503 +422,416 @@ export default function App() {
             value={urlInput}
             onChangeText={setUrlInput}
             onSubmitEditing={navigate}
-            placeholder="Buscar o ingresar URL..."
-            placeholderTextColor={darkMode ? '#888' : '#666'}
-            mode="outlined"
+            placeholder="Buscar o escribir URL..."
+            mode="flat"
             dense
-            theme={{ colors: { primary: 'white', text: 'white', background: darkMode ? '#333' : '#fff' } }}
+            autoCapitalize="none"
+            autoCorrect={false}
           />
-          
-          <Appbar.Action 
-            icon="magnify" 
-            color="white"
-            onPress={navigate} 
-          />
-          <Appbar.Action 
-            icon="plus" 
-            color="white"
-            onPress={addNewTab} 
-          />
-        </Appbar.Header>
-
-        {/* BARRA DE PROGRESO */}
-        {isLoading && (
-          <ProgressBar 
-            progress={progress} 
-            color={darkMode ? '#bb86fc' : '#4f46e5'} 
-            style={styles.progressBar}
-          />
-        )}
-
-        {/* PESTAÑAS */}
-        <ScrollView horizontal style={[styles.tabsContainer, { backgroundColor: darkMode ? '#1e1e1e' : '#f5f5f5' }]}>
-          {tabs.map((tab) => (
-            <TouchableOpacity
-              key={tab.id}
-              style={[
-                styles.tab,
-                activeTab === tab.id && styles.activeTab,
-                { backgroundColor: darkMode ? '#333' : '#e0e0e0' },
-                activeTab === tab.id && { backgroundColor: darkMode ? '#bb86fc' : '#4f46e5' }
-              ]}
-              onPress={() => switchTab(tab.id)}
-            >
-              <Text style={[styles.tabTitle, { color: activeTab === tabId ? 'white' : (darkMode ? '#fff' : '#333') }]} numberOfLines={1}>
-                {tab.title}
-              </Text>
-              {tabs.length > 1 && (
-                <TouchableOpacity 
-                  style={styles.closeTab}
-                  onPress={() => closeTab(tab.id)}
-                >
-                  <Text style={[styles.closeText, { color: activeTab === tabId ? 'white' : (darkMode ? '#fff' : '#666') }]}>×</Text>
-                </TouchableOpacity>
-              )}
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* BARRA DE URL ACTUAL */}
-        <View style={[styles.urlBar, { backgroundColor: darkMode ? '#1a1a1a' : '#f9f9f9' }]}>
-          <Text style={[styles.currentUrl, { color: darkMode ? '#ccc' : '#666' }]} numberOfLines={1}>
-            {currentUrl}
-          </Text>
-          <Chip 
-            icon={currentUrl.startsWith('https') ? "lock" : "lock-open"}
-            mode="outlined"
-            style={styles.securityChip}
-            textStyle={{ color: currentUrl.startsWith('https') ? 'green' : 'red' }}
-          >
-            {currentUrl.startsWith('https') ? 'Seguro' : 'No seguro'}
-          </Chip>
         </View>
+        
+        {/* CONTADOR DE PESTAÑAS */}
+        <Chip 
+          style={styles.tabCounter}
+          onPress={() => setShowTabSelector(true)}
+        >
+          {tabs.length}
+        </Chip>
+        
+        {/* BOTÓN NUEVA PESTAÑA */}
+        <Appbar.Action 
+          icon="plus" 
+          onPress={createTab} 
+        />
+      </Appbar.Header>
 
-        {/* BARRA DE NAVEGACIÓN MEJORADA */}
-        <View style={[styles.navBar, { backgroundColor: darkMode ? '#1e1e1e' : '#f5f5f5' }]}>
-          <View style={styles.navGroup}>
-            <Button 
-              mode="text" 
-              icon="arrow-left" 
-              onPress={() => webViewRef.current?.goBack()}
-              textColor={darkMode ? 'white' : '#4f46e5'}
-            />
-            
-            <Button 
-              mode="text" 
-              icon="arrow-right" 
-              onPress={() => webViewRef.current?.goForward()}
-              textColor={darkMode ? 'white' : '#4f46e5'}
-            />
-            
-            <Button 
-              mode="text" 
-              icon="reload" 
-              onPress={() => webViewRef.current?.reload()}
-              textColor={darkMode ? 'white' : '#4f46e5'}
-            />
-            
-            <Button 
-              mode="text" 
-              icon="home" 
-              onPress={() => {
-                const url = 'https://google.com';
-                setUrlInput(url);
-                setCurrentUrl(url);
-                const updatedTabs = tabs.map(tab => 
-                  tab.id === activeTab ? { ...tab, url: url, title: 'Google' } : tab
-                );
-                setTabs(updatedTabs);
-              }}
-              textColor={darkMode ? 'white' : '#4f46e5'}
-            />
-          </View>
+      {/* ==================== BARRA DE NAVEGACIÓN ==================== */}
+      <View style={styles.navBar}>
+        <Button 
+          mode="text" 
+          icon="arrow-left" 
+          onPress={() => activeTab?.webViewRef?.current?.goBack()}
+          compact
+        >
+          Atrás
+        </Button>
+        
+        <Button 
+          mode="text" 
+          icon="arrow-right" 
+          onPress={() => activeTab?.webViewRef?.current?.goForward()}
+          compact
+        >
+          Adelante
+        </Button>
+        
+        <Button 
+          mode="text" 
+          icon="reload" 
+          onPress={() => activeTab?.webViewRef?.current?.reload()}
+          compact
+        >
+          Recargar
+        </Button>
+        
+        <Button 
+          mode="text" 
+          icon="home" 
+          onPress={() => {
+            setUrlInput('https://google.com');
+            setCurrentUrl('https://google.com');
+          }}
+          compact
+        >
+          Inicio
+        </Button>
+      </View>
 
-          <View style={styles.navGroup}>
-            <Text style={[styles.modeText, { color: darkMode ? '#bb86fc' : '#4f46e5' }]}>🌙</Text>
-            <Switch value={darkMode} onValueChange={toggleDarkMode} color="#4f46e5" />
-            
-            <Text style={[styles.modeText, { color: darkMode ? '#bb86fc' : '#4f46e5' }]}>🕵️</Text>
-            <Switch value={incognitoMode} onValueChange={toggleIncognitoMode} color="#4f46e5" />
-          </View>
-        </View>
+      {/* ==================== BARRA DE ESTADO DE PRIVACIDAD ==================== */}
+      <View style={styles.privacyBar}>
+        <Text style={styles.privacyText}>
+          🛡️ Privacidad Total | UA: {currentUA.includes('Windows') ? 'Win' : currentUA.includes('Mac') ? 'Mac' : currentUA.includes('Android') ? 'Android' : 'iOS'} | 
+          {' '}{languages[currentLang]}
+        </Text>
+        <Text style={[styles.privacyText, { color: autoRotateUA ? '#4CAF50' : '#999' }]}>
+          🔄 Auto: {autoRotateUA ? 'ON' : 'OFF'} | 🚫 Anti-Fingerprinting
+        </Text>
+      </View>
 
-        {/* CONFIGURACIÓN ACTUAL */}
-        <View style={[styles.configBar, { backgroundColor: darkMode ? '#1a1a1a' : '#e3f2fd' }]}>
-          <Text style={[styles.configText, { color: darkMode ? '#fff' : '#1565c0' }]}>
-            {selectedUA ? 'User-Agent: ' + userAgents.desktop.concat(userAgents.mobile)
-              .find(ua => ua.value === selectedUA)?.name : 'User-Agent: Predeterminado'}
-          </Text>
-          <Text style={[styles.configText, { color: darkMode ? '#fff' : '#1565c0' }]}>
-            Idioma: {languageProfiles[selectedLanguage]} | 
-            {incognitoMode ? ' 🕵️ Incógnito' : ' 🌐 Normal'} |
-            {darkMode ? ' 🌙 Oscuro' : ' ☀️ Claro'}
-          </Text>
-        </View>
-
-        {/* NAVEGADOR WEBVIEW */}
+      {/* ==================== WEBVIEW (PESTAÑA ACTIVA) ==================== */}
+      {tabs.map(tab => (
         <WebView
-          ref={webViewRef}
-          source={{ uri: currentUrl }}
-          style={styles.webview}
-          userAgent={selectedUA}
-          onLoadStart={() => {
-            setIsLoading(true);
-            setProgress(0);
-          }}
-          onLoadProgress={({ nativeEvent }) => {
-            setProgress(nativeEvent.progress);
-          }}
-          onLoadEnd={() => {
-            setIsLoading(false);
-            setProgress(1);
-            // Actualizar título de la pestaña
-            const updatedTabs = tabs.map(tab => 
-              tab.id === activeTab ? { ...tab, title: currentUrl.split('/')[2] || 'Página' } : tab
-            );
-            setTabs(updatedTabs);
-          }}
+          key={tab.id}
+          ref={tab.webViewRef}
+          source={{ uri: tab.url }}
+          style={[styles.webview, { display: tab.id === activeTabId ? 'flex' : 'none' }]}
+          userAgent={currentUA}
+          onNavigationStateChange={handleNavigationStateChange}
+          onLoadStart={() => setIsLoading(true)}
+          onLoadEnd={() => setIsLoading(false)}
+          javaScriptEnabled={true}
+          domStorageEnabled={false}
+          thirdPartyCookiesEnabled={false}
+          sharedCookiesEnabled={false}
+          cacheEnabled={false}
+          incognito={true}
+          injectedJavaScript={getInjectedJavaScript()}
           onError={(syntheticEvent) => {
             const { nativeEvent } = syntheticEvent;
             console.warn('WebView error: ', nativeEvent);
-            setIsLoading(false);
           }}
-          injectedJavaScript={`
-            // Inyectar configuración de idioma
-            Object.defineProperty(navigator, 'language', {
-              get: function() { return '${selectedLanguage}'; }
-            });
-            Object.defineProperty(navigator, 'languages', {
-              get: function() { return ['${selectedLanguage}', '${selectedLanguage.split('-')[0]}', 'en']; }
-            });
-            true;
-          `}
         />
+      ))}
 
-        {/* MODAL SELECTOR USER-AGENT MEJORADO */}
-        <Modal
-          visible={showUASelector}
-          animationType="slide"
-          onRequestClose={() => setShowUASelector(false)}
-        >
-          <View style={[styles.modalContainer, { backgroundColor: darkMode ? '#121212' : 'white' }]}>
-            <Appbar.Header style={{ backgroundColor: darkMode ? '#1e1e1e' : '#4f46e5' }}>
-              <Appbar.BackAction color="white" onPress={() => setShowUASelector(false)} />
-              <Appbar.Content title="Configuración de Privacidad" titleStyle={{ color: 'white' }} />
-              <Appbar.Action icon="cog" color="white" onPress={() => setShowProxyConfig(true)} />
-              <Appbar.Action icon="refresh" color="white" onPress={resetSettings} />
-            </Appbar.Header>
+      {/* ==================== MODAL: SELECTOR DE PESTAÑAS ==================== */}
+      <Modal
+        visible={showTabSelector}
+        animationType="slide"
+        onRequestClose={() => setShowTabSelector(false)}
+      >
+        <View style={styles.modalContainer}>
+          <Appbar.Header>
+            <Appbar.BackAction onPress={() => setShowTabSelector(false)} />
+            <Appbar.Content title={`Pestañas (${tabs.length})`} />
+            <Appbar.Action icon="plus" onPress={createTab} />
+          </Appbar.Header>
 
-            <ScrollView style={styles.modalContent}>
-              
-              {/* CONFIGURACIÓN RÁPIDA */}
-              <Card style={[styles.sectionCard, { backgroundColor: darkMode ? '#1e1e1e' : 'white' }]}>
-                <Card.Title title="Configuración Rápida" titleStyle={{ color: darkMode ? 'white' : 'black' }} />
-                <Card.Content>
-                  <View style={styles.quickSettings}>
-                    <View style={styles.settingRow}>
-                      <Text style={[styles.settingText, { color: darkMode ? 'white' : 'black' }]}>Modo Oscuro</Text>
-                      <Switch value={darkMode} onValueChange={toggleDarkMode} color="#4f46e5" />
-                    </View>
-                    <View style={styles.settingRow}>
-                      <Text style={[styles.settingText, { color: darkMode ? 'white' : 'black' }]}>Modo Incógnito</Text>
-                      <Switch value={incognitoMode} onValueChange={toggleIncognitoMode} color="#4f46e5" />
-                    </View>
-                  </View>
-                </Card.Content>
-              </Card>
-
-              {/* SELECTOR DE IDIOMA */}
-              <Card style={[styles.sectionCard, { backgroundColor: darkMode ? '#1e1e1e' : 'white' }]}>
-                <Card.Title title="Idioma y Región" titleStyle={{ color: darkMode ? 'white' : 'black' }} />
-                <Card.Content>
-                  {Object.entries(languageProfiles).map(([code, name]) => (
-                    <TouchableOpacity
-                      key={code}
-                      style={[
-                        styles.languageItem,
-                        selectedLanguage === code && styles.selectedItem,
-                        { backgroundColor: darkMode ? '#333' : 'transparent' }
-                      ]}
-                      onPress={() => applyLanguage(code)}
-                    >
-                      <RadioButton
-                        value={code}
-                        status={selectedLanguage === code ? 'checked' : 'unchecked'}
-                        onPress={() => applyLanguage(code)}
-                        color={darkMode ? '#bb86fc' : '#4f46e5'}
-                      />
-                      <Text style={[styles.languageText, { color: darkMode ? 'white' : 'black' }]}>{name}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </Card.Content>
-              </Card>
-
-              {/* USER-AGENTS ESCRITORIO */}
-              <Card style={[styles.sectionCard, { backgroundColor: darkMode ? '#1e1e1e' : 'white' }]}>
-                <Card.Title title="Modo Escritorio" titleStyle={{ color: darkMode ? 'white' : 'black' }} />
-                <Card.Content>
-                  {userAgents.desktop.map((ua, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      style={[
-                        styles.uaItem,
-                        selectedUA === ua.value && styles.selectedItem,
-                        { backgroundColor: darkMode ? '#333' : 'transparent' }
-                      ]}
-                      onPress={() => applyUserAgent(ua.value)}
-                    >
-                      <RadioButton
-                        value={ua.value}
-                        status={selectedUA === ua.value ? 'checked' : 'unchecked'}
-                        onPress={() => applyUserAgent(ua.value)}
-                        color={darkMode ? '#bb86fc' : '#4f46e5'}
-                      />
-                      <View style={styles.uaInfo}>
-                        <Text style={[styles.uaName, { color: darkMode ? 'white' : 'black' }]}>{ua.name}</Text>
-                        <Text style={[styles.uaResolution, { color: darkMode ? '#ccc' : '#666' }]}>{ua.resolution}</Text>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </Card.Content>
-              </Card>
-
-              {/* USER-AGENTS MÓVIL */}
-              <Card style={[styles.sectionCard, { backgroundColor: darkMode ? '#1e1e1e' : 'white' }]}>
-                <Card.Title title="Modo Móvil" titleStyle={{ color: darkMode ? 'white' : 'black' }} />
-                <Card.Content>
-                  {userAgents.mobile.map((ua, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      style={[
-                        styles.uaItem,
-                        selectedUA === ua.value && styles.selectedItem,
-                        { backgroundColor: darkMode ? '#333' : 'transparent' }
-                      ]}
-                      onPress={() => applyUserAgent(ua.value)}
-                    >
-                      <RadioButton
-                        value={ua.value}
-                        status={selectedUA === ua.value ? 'checked' : 'unchecked'}
-                        onPress={() => applyUserAgent(ua.value)}
-                        color={darkMode ? '#bb86fc' : '#4f46e5'}
-                      />
-                      <View style={styles.uaInfo}>
-                        <Text style={[styles.uaName, { color: darkMode ? 'white' : 'black' }]}>{ua.name}</Text>
-                        <Text style={[styles.uaResolution, { color: darkMode ? '#ccc' : '#666' }]}>{ua.resolution}</Text>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </Card.Content>
-              </Card>
-
-            </ScrollView>
-          </View>
-        </Modal>
-
-        {/* MODAL CONFIGURACIÓN PROXY */}
-        <Modal visible={showProxyConfig} animationType="slide">
-          <View style={[styles.modalContainer, { backgroundColor: darkMode ? '#121212' : 'white' }]}>
-            <Appbar.Header style={{ backgroundColor: darkMode ? '#1e1e1e' : '#4f46e5' }}>
-              <Appbar.BackAction color="white" onPress={() => setShowProxyConfig(false)} />
-              <Appbar.Content title="Configuración Proxy" titleStyle={{ color: 'white' }} />
-            </Appbar.Header>
-
-            <ScrollView style={styles.modalContent}>
-              <Card style={[styles.sectionCard, { backgroundColor: darkMode ? '#1e1e1e' : 'white' }]}>
-                <Card.Title title="Configuración de Proxy" titleStyle={{ color: darkMode ? 'white' : 'black' }} />
-                <Card.Content>
-                  <Text style={[styles.settingText, { color: darkMode ? 'white' : 'black' }]}>
-                    Host del Proxy:
-                  </Text>
-                  <TextInput
-                    value={proxyConfig.host}
-                    onChangeText={(text) => setProxyConfig({...proxyConfig, host: text})}
-                    placeholder="ej: 192.168.1.1"
-                    placeholderTextColor={darkMode ? '#888' : '#666'}
-                    mode="outlined"
-                    style={styles.proxyInput}
-                    theme={{ colors: { primary: darkMode ? '#bb86fc' : '#4f46e5' } }}
-                  />
-                  
-                  <Text style={[styles.settingText, { color: darkMode ? 'white' : 'black' }]}>
-                    Puerto:
-                  </Text>
-                  <TextInput
-                    value={proxyConfig.port}
-                    onChangeText={(text) => setProxyConfig({...proxyConfig, port: text})}
-                    placeholder="ej: 8080"
-                    placeholderTextColor={darkMode ? '#888' : '#666'}
-                    mode="outlined"
-                    keyboardType="numeric"
-                    style={styles.proxyInput}
-                    theme={{ colors: { primary: darkMode ? '#bb86fc' : '#4f46e5' } }}
-                  />
-                  
-                  <View style={styles.settingRow}>
-                    <Text style={[styles.settingText, { color: darkMode ? 'white' : 'black' }]}>
-                      Habilitar Proxy
-                    </Text>
-                    <Switch 
-                      value={proxyConfig.enabled} 
-                      onValueChange={(value) => setProxyConfig({...proxyConfig, enabled: value})}
-                      color="#4f46e5"
+          <ScrollView style={styles.tabList}>
+            {tabs.map(tab => (
+              <Card 
+                key={tab.id}
+                style={[
+                  styles.tabCard,
+                  tab.id === activeTabId && styles.activeTabCard
+                ]}
+                onPress={() => switchTab(tab.id)}
+              >
+                <Card.Content style={styles.tabCardContent}>
+                  <View style={styles.tabInfo}>
+                    <IconButton
+                      icon={tab.isSecure ? "lock" : "lock-open"}
+                      size={16}
+                      iconColor={tab.isSecure ? "#4CAF50" : "#FFC107"}
                     />
+                    <View style={styles.tabDetails}>
+                      <Text style={styles.tabTitle} numberOfLines={1}>
+                        {tab.title}
+                      </Text>
+                      <Text style={styles.tabUrl} numberOfLines={1}>
+                        {tab.url}
+                      </Text>
+                    </View>
                   </View>
                   
-                  <Button 
-                    mode="contained" 
-                    onPress={saveProxyConfig}
-                    style={styles.saveButton}
-                    buttonColor={darkMode ? '#bb86fc' : '#4f46e5'}
-                  >
-                    Guardar Configuración
-                  </Button>
+                  <IconButton
+                    icon="close"
+                    size={20}
+                    onPress={() => closeTab(tab.id)}
+                  />
                 </Card.Content>
               </Card>
-            </ScrollView>
-          </View>
-        </Modal>
+            ))}
+          </ScrollView>
+        </View>
+      </Modal>
 
-      </View>
-    </PaperProvider>
+      {/* ==================== MODAL: CONFIGURACIÓN ==================== */}
+      <Modal
+        visible={showSettings}
+        animationType="slide"
+        onRequestClose={() => setShowSettings(false)}
+      >
+        <View style={styles.modalContainer}>
+          <Appbar.Header>
+            <Appbar.BackAction onPress={() => setShowSettings(false)} />
+            <Appbar.Content title="Configuración de Privacidad" />
+          </Appbar.Header>
+
+          <ScrollView style={styles.settingsContent}>
+            
+            {/* SECCIÓN: PRIVACIDAD TOTAL */}
+            <Card style={styles.settingCard}>
+              <Card.Title 
+                title="🛡️ Privacidad Total Activada" 
+                subtitle="Protección máxima contra rastreo"
+              />
+              <Card.Content>
+                <List.Item
+                  title="❌ Sin historial ni cookies"
+                  description="Todo se borra automáticamente"
+                  left={props => <List.Icon {...props} icon="check-circle" color="#4CAF50" />}
+                />
+                <List.Item
+                  title="✅ Anti-Fingerprinting"
+                  description="Bloquea identificación única"
+                  left={props => <List.Icon {...props} icon="check-circle" color="#4CAF50" />}
+                />
+                <List.Item
+                  title="🚫 Trackers bloqueados"
+                  description="Analytics y anuncios bloqueados"
+                  left={props => <List.Icon {...props} icon="check-circle" color="#4CAF50" />}
+                />
+              </Card.Content>
+            </Card>
+
+            {/* SECCIÓN: AUTO-ROTACIÓN */}
+            <Card style={styles.settingCard}>
+              <Card.Title title="🔄 Rotación Automática de Identidad" />
+              <Card.Content>
+                <View style={styles.switchRow}>
+                  <Text style={styles.switchLabel}>Activar auto-rotación</Text>
+                  <Switch
+                    value={autoRotateUA}
+                    onValueChange={setAutoRotateUA}
+                    trackColor={{ false: "#767577", true: "#4CAF50" }}
+                    thumbColor={autoRotateUA ? "#fff" : "#f4f3f4"}
+                  />
+                </View>
+
+                {autoRotateUA && (
+                  <View style={styles.intervalSelector}>
+                    <Text style={styles.intervalLabel}>Rotar cada:</Text>
+                    <View style={styles.intervalButtons}>
+                      {[5, 10, 15, 30].map(minutes => (
+                        <Button
+                          key={minutes}
+                          mode={rotationInterval === minutes ? "contained" : "outlined"}
+                          onPress={() => setRotationInterval(minutes)}
+                          style={styles.intervalButton}
+                          compact
+                        >
+                          {minutes} min
+                        </Button>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                <Button
+                  mode="contained"
+                  icon="reload"
+                  onPress={rotateIdentity}
+                  style={styles.rotateButton}
+                >
+                  Rotar Identidad Ahora
+                </Button>
+              </Card.Content>
+            </Card>
+
+            {/* SECCIÓN: ESTADO ACTUAL */}
+            <Card style={styles.settingCard}>
+              <Card.Title title="📊 Estado Actual" />
+              <Card.Content>
+                <Text style={styles.statusLabel}>User-Agent:</Text>
+                <Text style={styles.statusValue}>
+                  {currentUA.includes('Windows') ? '💻 Windows' :
+                   currentUA.includes('Macintosh') ? '🍎 macOS' :
+                   currentUA.includes('Linux') ? '🐧 Linux' :
+                   currentUA.includes('Android') ? '📱 Android' : '📱 iOS'}
+                </Text>
+
+                <Text style={[styles.statusLabel, { marginTop: 10 }]}>Idioma:</Text>
+                <Text style={styles.statusValue}>{languages[currentLang]}</Text>
+
+                <Text style={[styles.statusLabel, { marginTop: 10 }]}>Protección:</Text>
+                <Text style={styles.statusValue}>
+                  🛡️ Anti-Fingerprinting | 🚫 {trackerBlockList.length} trackers bloqueados
+                </Text>
+              </Card.Content>
+            </Card>
+
+            {/* BOTÓN: LIMPIAR TODO */}
+            <Button
+              mode="contained"
+              icon="delete-sweep"
+              onPress={clearEverything}
+              style={styles.clearButton}
+              buttonColor="#F44336"
+            >
+              🧹 Limpiar Todo y Reiniciar
+            </Button>
+
+          </ScrollView>
+        </View>
+      </Modal>
+
+    </View>
   );
 }
 
+// Los estilos se mantienen igual que en tu código original...
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#fff',
+  },
+  header: {
+    backgroundColor: '#1976D2',
+  },
+  urlContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 8,
+    marginHorizontal: 8,
   },
   urlInput: {
     flex: 1,
-    marginHorizontal: 10,
-    height: 40,
+    backgroundColor: 'transparent',
+    fontSize: 14,
   },
-  progressBar: {
-    height: 2,
-  },
-  tabsContainer: {
-    maxHeight: 45,
-  },
-  tab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    margin: 2,
-    borderRadius: 5,
-    minWidth: 120,
-    maxWidth: 200,
-  },
-  activeTab: {
-    // El color se maneja dinámicamente
-  },
-  tabTitle: {
-    fontSize: 12,
-    flex: 1,
-  },
-  closeTab: {
-    marginLeft: 5,
-    padding: 2,
-  },
-  closeText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  urlBar: {
-    padding: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  currentUrl: {
-    fontSize: 12,
-    flex: 1,
-  },
-  securityChip: {
-    height: 25,
+  tabCounter: {
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    marginRight: 8,
   },
   navBar: {
     flexDirection: 'row',
-    padding: 8,
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    padding: 4,
+    justifyContent: 'space-around',
   },
-  navGroup: {
+  privacyBar: {
     flexDirection: 'row',
-    alignItems: 'center',
-  },
-  modeText: {
-    marginHorizontal: 5,
-    fontSize: 16,
-  },
-  configBar: {
+    justifyContent: 'space-between',
+    backgroundColor: '#E8F5E9',
     padding: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#C8E6C9',
   },
-  configText: {
+  privacyText: {
     fontSize: 11,
-    fontWeight: '500',
+    color: '#2E7D32',
+    fontWeight: '600',
   },
   webview: {
     flex: 1,
   },
   modalContainer: {
     flex: 1,
+    backgroundColor: 'white',
   },
-  modalContent: {
+  tabList: {
     flex: 1,
     padding: 10,
   },
-  sectionCard: {
+  tabCard: {
+    marginBottom: 10,
+    elevation: 2,
+  },
+  activeTabCard: {
+    borderWidth: 2,
+    borderColor: '#1976D2',
+  },
+  tabCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  tabInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  tabDetails: {
+    flex: 1,
+  },
+  tabTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  tabUrl: {
+    fontSize: 12,
+    color: '#666',
+  },
+  settingsContent: {
+    flex: 1,
+    padding: 10,
+  },
+  settingCard: {
     marginBottom: 15,
   },
-  quickSettings: {
-    marginVertical: 10,
-  },
-  settingRow: {
+  switchRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-  },
-  settingText: {
-    fontSize: 16,
-  },
-  languageItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 5,
-    borderRadius: 5,
-  },
-  uaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingVertical: 10,
-    paddingHorizontal: 5,
-    borderRadius: 5,
   },
-  selectedItem: {
-    // El color se maneja dinámicamente
-  },
-  languageText: {
+  switchLabel: {
     fontSize: 16,
-    marginLeft: 8,
+    fontWeight: '500',
   },
-  uaInfo: {
-    marginLeft: 8,
+  intervalSelector: {
+    marginTop: 15,
+  },
+  intervalLabel: {
+    fontSize: 14,
+    marginBottom: 10,
+    color: '#666',
+  },
+  intervalButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  intervalButton: {
     flex: 1,
   },
-  uaName: {
+  rotateButton: {
+    marginTop: 15,
+  },
+  statusLabel: {
     fontSize: 14,
     fontWeight: 'bold',
+    color: '#333',
   },
-  uaResolution: {
-    fontSize: 12,
+  statusValue: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
   },
-  proxyInput: {
-    marginVertical: 8,
-  },
-  saveButton: {
-    marginTop: 15,
+  clearButton: {
+    margin: 15,
+    paddingVertical: 8,
   },
 });
