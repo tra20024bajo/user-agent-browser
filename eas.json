@@ -8,18 +8,31 @@
       "android": {
         "buildType": "apk",
         "autoIncrement": true
+      },
+      "ios": {
+        "buildConfiguration": "Release"
       }
     },
     "preview": {
       "android": {
         "buildType": "apk"
+      },
+      "ios": {
+        "simulator": true
       }
     },
     "development": {
       "android": {
         "buildType": "apk",
         "developmentClient": true
+      },
+      "ios": {
+        "developmentClient": true,
+        "simulator": true
       }
     }
+  },
+  "submit": {
+    "production": {}
   }
 }
