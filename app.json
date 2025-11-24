@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "User-Agent Browser",
-    "slug": "user-agent-browser",
+    "slug": "user",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -30,11 +30,6 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    },
-    "extra": {
-      "eas": {
-        "projectId": "4074eede-425c-43c1-acd3-bfee0f7d21e7"  // ← TU ID CORRECTO
-      }
     }
   }
 }
