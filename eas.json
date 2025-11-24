@@ -1,35 +1,25 @@
 {
-  "expo": {
-    "name": "User-Agent Browser",
-    "slug": "user-agent-browser",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#4f46e5"
+  "cli": {
+    "version": ">= 5.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "production": {
+      "android": {
+        "buildType": "apk",
+        "autoIncrement": true
+      }
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.tra20024bajo.useragentbrowser"
+    "preview": {
+      "android": {
+        "buildType": "apk"
+      }
     },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#4f46e5"
-      },
-      "package": "com.tra20024bajo.useragentbrowser",
-      "permissions": [
-        "INTERNET"
-      ]
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
+    "development": {
+      "android": {
+        "buildType": "apk",
+        "developmentClient": true
+      }
     }
   }
 }
