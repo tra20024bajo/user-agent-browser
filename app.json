@@ -9,35 +9,32 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#4f46e5"
     },
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yourcompany.useragentbrowser"
+      "bundleIdentifier": "com.tra20024bajo.useragentbrowser"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#FFFFFF"
+        "backgroundColor": "#4f46e5"
       },
-      "package": "com.yourcompany.useragentbrowser",
-      "permissions": ["INTERNET"]
+      "package": "com.tra20024bajo.useragentbrowser",
+      "permissions": [
+        "INTERNET"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "usesCleartextTraffic": true
-          }
-        }
-      ]
-    ]
+    "extra": {
+      "eas": {
+        "projectId": "user-agent-browser"
+      }
+    }
   }
 }
