@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, createRef } from 'react';
 import { View, StyleSheet, ScrollView, Modal, TouchableOpacity, Text, Switch, Dimensions } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Appbar, TextInput, Button, Card, Chip, IconButton, Portal, Dialog, List } from 'react-native-paper';
@@ -10,12 +10,14 @@ export default function App() {
       id: 1, 
       url: 'https://google.com', 
       title: 'Google',
-      isSecure: true,
-      webViewRef: useRef(null)
+      isSecure: true
     }
   ]);
   const [activeTabId, setActiveTabId] = useState(1);
   const [showTabSelector, setShowTabSelector] = useState(false);
+  
+  // Refs para WebViews (fuera del estado)
+  const webViewRefs = useRef({});
 
   // ==================== ESTADO DE NAVEGACIÓN ====================
   const [urlInput, setUrlInput] = useState('https://google.com');
@@ -52,7 +54,7 @@ export default function App() {
     "en-US": "🇺🇸 English"
   };
 
-  // ==================== BLOQUEO DE TRAKERS ====================
+  // ==================== BLOQUEO DE TRACKERS ====================
   const trackerBlockList = [
     'google-analytics.com',
     'googletagmanager.com',
@@ -67,100 +69,59 @@ export default function App() {
 
   // ==================== PROTECCIÓN ANTI-FINGERPRINTING ====================
   const antiFingerprintingJS = `
-    // Bloquear canvas fingerprinting
     (function() {
+      // Bloquear canvas fingerprinting
       const originalGetContext = HTMLCanvasElement.prototype.getContext;
       HTMLCanvasElement.prototype.getContext = function() {
         const context = originalGetContext.apply(this, arguments);
         if (context) {
-          const originalFillText = context.fillText;
-          const originalStrokeText = context.strokeText;
-          const originalGetImageData = context.getImageData;
-          const originalToDataURL = context.canvas.toDataURL;
-          
-          context.fillText = function() {
-            return originalFillText.apply(this, arguments);
-          };
-          context.strokeText = function() {
-            return originalStrokeText.apply(this, arguments);
-          };
-          context.getImageData = function() {
-            return originalGetImageData.apply(this, arguments);
-          };
-          context.canvas.toDataURL = function() {
+          const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+          HTMLCanvasElement.prototype.toDataURL = function() {
             return originalToDataURL.apply(this, arguments);
           };
         }
         return context;
       };
-    })();
 
-    // Randomizar valores de pantalla
-    const randomValues = {
-      width: Math.random() > 0.5 ? 1920 : 1366,
-      height: Math.random() > 0.5 ? 1080 : 768,
-      colorDepth: Math.random() > 0.5 ? 24 : 32,
-      pixelDepth: Math.random() > 0.5 ? 24 : 32
-    };
-
-    Object.defineProperty(screen, 'width', { 
-      get: () => randomValues.width,
-      configurable: true
-    });
-    Object.defineProperty(screen, 'height', { 
-      get: () => randomValues.height,
-      configurable: true
-    });
-    Object.defineProperty(screen, 'availWidth', { 
-      get: () => randomValues.width,
-      configurable: true
-    });
-    Object.defineProperty(screen, 'availHeight', { 
-      get: () => randomValues.height,
-      configurable: true
-    });
-    Object.defineProperty(screen, 'colorDepth', { 
-      get: () => randomValues.colorDepth,
-      configurable: true
-    });
-    Object.defineProperty(screen, 'pixelDepth', { 
-      get: () => randomValues.pixelDepth,
-      configurable: true
-    });
-
-    // Bloquear WebGL fingerprinting
-    if (typeof WebGLRenderingContext !== 'undefined') {
-      const originalGetParameter = WebGLRenderingContext.prototype.getParameter;
-      WebGLRenderingContext.prototype.getParameter = function(parameter) {
-        if (parameter === 37445) return "Intel Inc.";
-        if (parameter === 37446) return "Intel Iris OpenGL Engine";
-        return originalGetParameter.call(this, parameter);
+      // Randomizar valores de pantalla
+      const randomValues = {
+        width: Math.random() > 0.5 ? 1920 : 1366,
+        height: Math.random() > 0.5 ? 1080 : 768,
+        colorDepth: Math.random() > 0.5 ? 24 : 32,
+        pixelDepth: Math.random() > 0.5 ? 24 : 32
       };
-    }
 
-    // Bloquear audio fingerprinting
-    if (typeof AudioContext !== 'undefined') {
-      const originalCreateOscillator = AudioContext.prototype.createOscillator;
-      AudioContext.prototype.createOscillator = function() {
-        const oscillator = originalCreateOscillator.call(this);
-        const originalFrequency = oscillator.frequency;
-        Object.defineProperty(oscillator.frequency, 'value', {
-          get: () => 440,
-          set: () => {}
+      try {
+        Object.defineProperty(screen, 'width', { 
+          get: () => randomValues.width,
+          configurable: true
         });
-        return oscillator;
-      };
-    }
+        Object.defineProperty(screen, 'height', { 
+          get: () => randomValues.height,
+          configurable: true
+        });
+        Object.defineProperty(screen, 'colorDepth', { 
+          get: () => randomValues.colorDepth,
+          configurable: true
+        });
+        Object.defineProperty(screen, 'pixelDepth', { 
+          get: () => randomValues.pixelDepth,
+          configurable: true
+        });
+      } catch(e) {
+        console.log('Screen protection applied');
+      }
 
-    // Bloquear font fingerprinting
-    const originalMeasureText = CanvasRenderingContext2D.prototype.measureText;
-    CanvasRenderingContext2D.prototype.measureText = function(text) {
-      const metrics = originalMeasureText.call(this, text);
-      metrics.width = Math.round(metrics.width);
-      return metrics;
-    };
-
-    true;
+      // Bloquear WebGL fingerprinting
+      if (typeof WebGLRenderingContext !== 'undefined') {
+        const originalGetParameter = WebGLRenderingContext.prototype.getParameter;
+        WebGLRenderingContext.prototype.getParameter = function(parameter) {
+          if (parameter === 37445) return "Intel Inc.";
+          if (parameter === 37446) return "Intel Iris OpenGL Engine";
+          return originalGetParameter.call(this, parameter);
+        };
+      }
+    })();
   `;
 
   // ==================== INICIALIZAR ====================
@@ -189,16 +150,20 @@ export default function App() {
     setCurrentUA(randomUA);
     setCurrentLang(randomLang);
     
-    // Recargar pestaña activa con nuevo User-Agent
-    const activeTab = tabs.find(t => t.id === activeTabId);
-    if (activeTab?.webViewRef?.current) {
-      activeTab.webViewRef.current.reload();
+    // Recargar pestaña activa
+    const activeWebView = webViewRefs.current[activeTabId];
+    if (activeWebView) {
+      activeWebView.reload();
     }
   };
 
-  // ==================== VERIFICAR SI URL ES TRAKER ====================
+  // ==================== VERIFICAR SI URL ES TRACKER ====================
   const isTrackerUrl = (url) => {
-    return trackerBlockList.some(tracker => url.includes(tracker));
+    try {
+      return trackerBlockList.some(tracker => url.includes(tracker));
+    } catch (e) {
+      return false;
+    }
   };
 
   // ==================== OBTENER PESTAÑA ACTIVA ====================
@@ -210,8 +175,7 @@ export default function App() {
       id: Date.now(),
       url: 'https://google.com',
       title: 'Nueva pestaña',
-      isSecure: true,
-      webViewRef: React.createRef()
+      isSecure: true
     };
     setTabs([...tabs, newTab]);
     setActiveTabId(newTab.id);
@@ -224,16 +188,17 @@ export default function App() {
     if (tabs.length === 1) {
       // Si es la última pestaña, limpiar y crear nueva
       clearTabData(tabId);
-      setUrlInput('https://google.com');
-      setCurrentUrl('https://google.com');
+      const newId = Date.now();
       setTabs([{
-        id: Date.now(),
+        id: newId,
         url: 'https://google.com',
         title: 'Nueva pestaña',
-        isSecure: true,
-        webViewRef: React.createRef()
+        isSecure: true
       }]);
-      setActiveTabId(Date.now());
+      setActiveTabId(newId);
+      setUrlInput('https://google.com');
+      setCurrentUrl('https://google.com');
+      delete webViewRefs.current[tabId];
       return;
     }
     
@@ -242,6 +207,9 @@ export default function App() {
     
     const newTabs = tabs.filter(t => t.id !== tabId);
     setTabs(newTabs);
+    
+    // Eliminar referencia
+    delete webViewRefs.current[tabId];
     
     if (activeTabId === tabId) {
       const newActiveTab = newTabs[0];
@@ -253,28 +221,36 @@ export default function App() {
 
   // ==================== LIMPIAR DATOS DE PESTAÑA ====================
   const clearTabData = (tabId) => {
-    const tab = tabs.find(t => t.id === tabId);
-    if (tab?.webViewRef?.current) {
-      // Limpiar cookies y caché
-      tab.webViewRef.current.injectJavaScript(`
-        // Limpiar cookies
-        document.cookie.split(";").forEach(function(c) { 
-          document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
-        });
-        // Limpiar localStorage
-        localStorage.clear();
-        // Limpiar sessionStorage
-        sessionStorage.clear();
-        // Limpiar indexedDB
-        if (window.indexedDB) {
-          indexedDB.databases().then(function(databases) {
-            databases.forEach(function(db) {
-              indexedDB.deleteDatabase(db.name);
-            });
-          });
-        }
-        true;
-      `);
+    const webView = webViewRefs.current[tabId];
+    if (webView) {
+      try {
+        webView.injectJavaScript(`
+          (function() {
+            try {
+              // Limpiar cookies
+              document.cookie.split(";").forEach(function(c) { 
+                document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+              });
+              // Limpiar storage
+              if (typeof localStorage !== 'undefined') localStorage.clear();
+              if (typeof sessionStorage !== 'undefined') sessionStorage.clear();
+              // Limpiar indexedDB
+              if (window.indexedDB && window.indexedDB.databases) {
+                window.indexedDB.databases().then(function(dbs) {
+                  dbs.forEach(function(db) {
+                    window.indexedDB.deleteDatabase(db.name);
+                  });
+                });
+              }
+            } catch(e) {
+              console.log('Clear complete');
+            }
+          })();
+          true;
+        `);
+      } catch (e) {
+        console.log('Error clearing tab data');
+      }
     }
   };
 
@@ -321,24 +297,28 @@ export default function App() {
 
   // ==================== ACTUALIZAR URL MIENTRAS NAVEGAS ====================
   const handleNavigationStateChange = (navState) => {
-    const { url, title } = navState;
-    
-    // Bloquear trackers
-    if (isTrackerUrl(url)) {
-      alert('🚫 Tracker bloqueado: ' + new URL(url).hostname);
-      return;
+    try {
+      const { url, title } = navState;
+      
+      // Bloquear trackers
+      if (isTrackerUrl(url)) {
+        console.log('🚫 Tracker bloqueado: ' + url);
+        return;
+      }
+      
+      const isSecure = url.startsWith('https://');
+      
+      setCurrentUrl(url);
+      setUrlInput(url);
+      
+      setTabs(tabs.map(t => 
+        t.id === activeTabId 
+          ? { ...t, url, title: title || 'Navegando...', isSecure }
+          : t
+      ));
+    } catch (e) {
+      console.log('Navigation state error:', e);
     }
-    
-    const isSecure = url.startsWith('https://');
-    
-    setCurrentUrl(url);
-    setUrlInput(url);
-    
-    setTabs(tabs.map(t => 
-      t.id === activeTabId 
-        ? { ...t, url, title: title || new URL(url).hostname, isSecure }
-        : t
-    ));
   };
 
   // ==================== LIMPIAR TODO ====================
@@ -347,16 +327,19 @@ export default function App() {
     tabs.forEach(tab => clearTabData(tab.id));
     
     // Crear pestaña limpia
+    const newId = Date.now();
     setTabs([{
-      id: Date.now(),
+      id: newId,
       url: 'https://google.com',
       title: 'Nueva pestaña',
-      isSecure: true,
-      webViewRef: React.createRef()
+      isSecure: true
     }]);
-    setActiveTabId(Date.now());
+    setActiveTabId(newId);
     setUrlInput('https://google.com');
     setCurrentUrl('https://google.com');
+    
+    // Limpiar refs
+    webViewRefs.current = {};
     
     // Rotar identidad
     rotateIdentity();
@@ -371,29 +354,40 @@ export default function App() {
       ${antiFingerprintingJS}
       
       // Inyectar idioma
-      Object.defineProperty(navigator, 'language', {
-        get: function() { return '${currentLang}'; },
-        configurable: true
-      });
-      Object.defineProperty(navigator, 'languages', {
-        get: function() { return ['${currentLang}', '${currentLang.split('-')[0]}']; },
-        configurable: true
-      });
+      (function() {
+        try {
+          Object.defineProperty(navigator, 'language', {
+            get: function() { return '${currentLang}'; },
+            configurable: true
+          });
+          Object.defineProperty(navigator, 'languages', {
+            get: function() { return ['${currentLang}', '${currentLang.split('-')[0]}']; },
+            configurable: true
+          });
+        } catch(e) {}
+      })();
       
       // Limpiar datos al cargar
-      localStorage.clear();
-      sessionStorage.clear();
+      (function() {
+        try {
+          if (typeof localStorage !== 'undefined') localStorage.clear();
+          if (typeof sessionStorage !== 'undefined') sessionStorage.clear();
+        } catch(e) {}
+      })();
       
-      // Bloquear request a trackers
-      const originalFetch = window.fetch;
-      window.fetch = function(...args) {
-        const url = args[0];
-        if (typeof url === 'string' && ${JSON.stringify(trackerBlockList)}.some(tracker => url.includes(tracker))) {
-          console.log('🚫 Tracker bloqueado:', url);
-          return Promise.reject(new Error('Tracker bloqueado'));
-        }
-        return originalFetch.apply(this, args);
-      };
+      // Bloquear fetch a trackers
+      (function() {
+        const trackers = ${JSON.stringify(trackerBlockList)};
+        const originalFetch = window.fetch;
+        window.fetch = function(...args) {
+          const url = args[0];
+          if (typeof url === 'string' && trackers.some(tracker => url.includes(tracker))) {
+            console.log('🚫 Tracker bloqueado:', url);
+            return Promise.reject(new Error('Tracker bloqueado'));
+          }
+          return originalFetch.apply(this, args);
+        };
+      })();
       
       true;
     `;
@@ -450,7 +444,7 @@ export default function App() {
         <Button 
           mode="text" 
           icon="arrow-left" 
-          onPress={() => activeTab?.webViewRef?.current?.goBack()}
+          onPress={() => webViewRefs.current[activeTabId]?.goBack()}
           compact
         >
           Atrás
@@ -459,7 +453,7 @@ export default function App() {
         <Button 
           mode="text" 
           icon="arrow-right" 
-          onPress={() => activeTab?.webViewRef?.current?.goForward()}
+          onPress={() => webViewRefs.current[activeTabId]?.goForward()}
           compact
         >
           Adelante
@@ -468,7 +462,7 @@ export default function App() {
         <Button 
           mode="text" 
           icon="reload" 
-          onPress={() => activeTab?.webViewRef?.current?.reload()}
+          onPress={() => webViewRefs.current[activeTabId]?.reload()}
           compact
         >
           Recargar
@@ -480,6 +474,7 @@ export default function App() {
           onPress={() => {
             setUrlInput('https://google.com');
             setCurrentUrl('https://google.com');
+            navigate();
           }}
           compact
         >
@@ -494,7 +489,7 @@ export default function App() {
           {' '}{languages[currentLang]}
         </Text>
         <Text style={[styles.privacyText, { color: autoRotateUA ? '#4CAF50' : '#999' }]}>
-          🔄 Auto: {autoRotateUA ? 'ON' : 'OFF'} | 🚫 Anti-Fingerprinting
+          🔄 Auto: {autoRotateUA ? 'ON' : 'OFF'} | 🚫 Anti-Track
         </Text>
       </View>
 
@@ -502,10 +497,12 @@ export default function App() {
       {tabs.map(tab => (
         <WebView
           key={tab.id}
-          ref={tab.webViewRef}
+          ref={(ref) => {
+            if (ref) webViewRefs.current[tab.id] = ref;
+          }}
           source={{ uri: tab.url }}
           style={[styles.webview, { display: tab.id === activeTabId ? 'flex' : 'none' }]}
-          userAgent={currentUA}
+          userAgent={currentUA || undefined}
           onNavigationStateChange={handleNavigationStateChange}
           onLoadStart={() => setIsLoading(true)}
           onLoadEnd={() => setIsLoading(false)}
@@ -699,7 +696,6 @@ export default function App() {
   );
 }
 
-// Los estilos se mantienen igual que en tu código original...
 const styles = StyleSheet.create({
   container: {
     flex: 1,
