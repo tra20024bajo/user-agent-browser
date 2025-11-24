@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Modal, TouchableOpacity, Text } from 'react-native';
+import { View, StyleSheet, ScrollView, Modal, TouchableOpacity, Text, Alert } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { Appbar, TextInput, Button, Card, RadioButton, List, Provider as PaperProvider } from 'react-native-paper';
+import { Appbar, TextInput, Button, Card, RadioButton, Provider as PaperProvider, Switch, Chip, ProgressBar, Divider } from 'react-native-paper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function App() {
@@ -12,8 +12,17 @@ export default function App() {
   const [selectedUA, setSelectedUA] = useState('');
   const [selectedLanguage, setSelectedLanguage] = useState('en-US');
   const [isLoading, setIsLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  
+  // NUEVOS ESTADOS PARA MEJORAS
+  const [darkMode, setDarkMode] = useState(false);
+  const [incognitoMode, setIncognitoMode] = useState(false);
+  const [tabs, setTabs] = useState([{ id: 1, url: 'https://google.com', title: 'Google' }]);
+  const [activeTab, setActiveTab] = useState(1);
+  const [showProxyConfig, setShowProxyConfig] = useState(false);
+  const [proxyConfig, setProxyConfig] = useState({ host: '', port: '', enabled: false });
 
-  // USER-AGENTS database (de tu extensión)
+  // USER-AGENTS database
   const userAgents = {
     desktop: [
       { 
@@ -66,7 +75,7 @@ export default function App() {
     ]
   };
 
-  // IDIOMAS (de tu extensión)
+  // IDIOMAS
   const languageProfiles = {
     "en-US": "English (US)",
     "es-ES": "Español (ES)", 
@@ -85,8 +94,13 @@ export default function App() {
     try {
       const savedUA = await AsyncStorage.getItem('selectedUA');
       const savedLang = await AsyncStorage.getItem('selectedLanguage');
+      const savedDarkMode = await AsyncStorage.getItem('darkMode');
+      const savedProxy = await AsyncStorage.getItem('proxyConfig');
+      
       if (savedUA) setSelectedUA(savedUA);
       if (savedLang) setSelectedLanguage(savedLang);
+      if (savedDarkMode) setDarkMode(JSON.parse(savedDarkMode));
+      if (savedProxy) setProxyConfig(JSON.parse(savedProxy));
     } catch (error) {
       console.log('Error loading settings:', error);
     }
@@ -100,6 +114,49 @@ export default function App() {
     }
     setCurrentUrl(url);
     setUrlInput(url);
+    
+    // Actualizar pestaña activa
+    const updatedTabs = tabs.map(tab => 
+      tab.id === activeTab ? { ...tab, url: url, title: 'Cargando...' } : tab
+    );
+    setTabs(updatedTabs);
+  };
+
+  // Agregar nueva pestaña
+  const addNewTab = () => {
+    const newTabId = Date.now();
+    const newTab = { id: newTabId, url: 'https://google.com', title: 'Nueva pestaña' };
+    setTabs([...tabs, newTab]);
+    setActiveTab(newTabId);
+    setCurrentUrl('https://google.com');
+    setUrlInput('https://google.com');
+  };
+
+  // Cerrar pestaña
+  const closeTab = (tabId) => {
+    if (tabs.length === 1) {
+      Alert.alert('No se puede cerrar', 'Debe haber al menos una pestaña abierta');
+      return;
+    }
+    
+    const filteredTabs = tabs.filter(tab => tab.id !== tabId);
+    setTabs(filteredTabs);
+    
+    if (activeTab === tabId) {
+      setActiveTab(filteredTabs[0].id);
+      setCurrentUrl(filteredTabs[0].url);
+      setUrlInput(filteredTabs[0].url);
+    }
+  };
+
+  // Cambiar entre pestañas
+  const switchTab = (tabId) => {
+    const tab = tabs.find(t => t.id === tabId);
+    if (tab) {
+      setActiveTab(tabId);
+      setCurrentUrl(tab.url);
+      setUrlInput(tab.url);
+    }
   };
 
   // Aplicar User-Agent
@@ -108,7 +165,6 @@ export default function App() {
     await AsyncStorage.setItem('selectedUA', ua);
     setShowUASelector(false);
     
-    // Recargar página con nuevo User-Agent
     if (webViewRef.current) {
       webViewRef.current.reload();
     }
@@ -119,30 +175,65 @@ export default function App() {
     setSelectedLanguage(lang);
     await AsyncStorage.setItem('selectedLanguage', lang);
     
-    // Recargar página con nuevo idioma
     if (webViewRef.current) {
       webViewRef.current.reload();
     }
+  };
+
+  // Toggle Modo Oscuro
+  const toggleDarkMode = async () => {
+    const newDarkMode = !darkMode;
+    setDarkMode(newDarkMode);
+    await AsyncStorage.setItem('darkMode', JSON.stringify(newDarkMode));
+  };
+
+  // Toggle Modo Incógnito
+  const toggleIncognitoMode = () => {
+    setIncognitoMode(!incognitoMode);
+    if (!incognitoMode) {
+      Alert.alert('Modo Incógnito', 'No se guardará el historial ni cookies en esta sesión');
+    }
+  };
+
+  // Configurar Proxy
+  const saveProxyConfig = async () => {
+    await AsyncStorage.setItem('proxyConfig', JSON.stringify(proxyConfig));
+    setShowProxyConfig(false);
+    Alert.alert('Proxy Configurado', 'La configuración se ha guardado');
   };
 
   // Reset configuración
   const resetSettings = async () => {
     setSelectedUA('');
     setSelectedLanguage('en-US');
-    await AsyncStorage.multiRemove(['selectedUA', 'selectedLanguage']);
+    setDarkMode(false);
+    setProxyConfig({ host: '', port: '', enabled: false });
+    await AsyncStorage.multiRemove(['selectedUA', 'selectedLanguage', 'darkMode', 'proxyConfig']);
+    
     if (webViewRef.current) {
       webViewRef.current.reload();
     }
   };
 
+  // Tema dinámico
+  const theme = {
+    colors: {
+      primary: darkMode ? '#bb86fc' : '#4f46e5',
+      background: darkMode ? '#121212' : '#ffffff',
+      surface: darkMode ? '#1e1e1e' : '#ffffff',
+      text: darkMode ? '#ffffff' : '#000000',
+    }
+  };
+
   return (
-    <PaperProvider>
-      <View style={styles.container}>
+    <PaperProvider theme={theme}>
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         
-        {/* HEADER CON BUSCADOR */}
-        <Appbar.Header>
+        {/* HEADER MEJORADO */}
+        <Appbar.Header style={{ backgroundColor: darkMode ? '#1e1e1e' : '#4f46e5' }}>
           <Appbar.Action 
             icon="menu" 
+            color="white"
             onPress={() => setShowUASelector(true)} 
           />
           
@@ -151,63 +242,136 @@ export default function App() {
             value={urlInput}
             onChangeText={setUrlInput}
             onSubmitEditing={navigate}
-            placeholder="Ingresa URL o busca..."
+            placeholder="Buscar o ingresar URL..."
+            placeholderTextColor={darkMode ? '#888' : '#666'}
             mode="outlined"
             dense
+            theme={{ colors: { primary: 'white', text: 'white', background: darkMode ? '#333' : '#fff' } }}
           />
           
           <Appbar.Action 
             icon="magnify" 
+            color="white"
             onPress={navigate} 
+          />
+          <Appbar.Action 
+            icon="plus" 
+            color="white"
+            onPress={addNewTab} 
           />
         </Appbar.Header>
 
-        {/* BARRA DE NAVEGACIÓN */}
-        <View style={styles.navBar}>
-          <Button 
-            mode="text" 
-            icon="arrow-left" 
-            onPress={() => webViewRef.current?.goBack()}
+        {/* BARRA DE PROGRESO */}
+        {isLoading && (
+          <ProgressBar 
+            progress={progress} 
+            color={darkMode ? '#bb86fc' : '#4f46e5'} 
+            style={styles.progressBar}
+          />
+        )}
+
+        {/* PESTAÑAS */}
+        <ScrollView horizontal style={[styles.tabsContainer, { backgroundColor: darkMode ? '#1e1e1e' : '#f5f5f5' }]}>
+          {tabs.map((tab) => (
+            <TouchableOpacity
+              key={tab.id}
+              style={[
+                styles.tab,
+                activeTab === tab.id && styles.activeTab,
+                { backgroundColor: darkMode ? '#333' : '#e0e0e0' },
+                activeTab === tab.id && { backgroundColor: darkMode ? '#bb86fc' : '#4f46e5' }
+              ]}
+              onPress={() => switchTab(tab.id)}
+            >
+              <Text style={[styles.tabTitle, { color: activeTab === tabId ? 'white' : (darkMode ? '#fff' : '#333') }]} numberOfLines={1}>
+                {tab.title}
+              </Text>
+              {tabs.length > 1 && (
+                <TouchableOpacity 
+                  style={styles.closeTab}
+                  onPress={() => closeTab(tab.id)}
+                >
+                  <Text style={[styles.closeText, { color: activeTab === tabId ? 'white' : (darkMode ? '#fff' : '#666') }]}>×</Text>
+                </TouchableOpacity>
+              )}
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* BARRA DE URL ACTUAL */}
+        <View style={[styles.urlBar, { backgroundColor: darkMode ? '#1a1a1a' : '#f9f9f9' }]}>
+          <Text style={[styles.currentUrl, { color: darkMode ? '#ccc' : '#666' }]} numberOfLines={1}>
+            {currentUrl}
+          </Text>
+          <Chip 
+            icon={currentUrl.startsWith('https') ? "lock" : "lock-open"}
+            mode="outlined"
+            style={styles.securityChip}
+            textStyle={{ color: currentUrl.startsWith('https') ? 'green' : 'red' }}
           >
-            Atrás
-          </Button>
-          
-          <Button 
-            mode="text" 
-            icon="arrow-right" 
-            onPress={() => webViewRef.current?.goForward()}
-          >
-            Adelante
-          </Button>
-          
-          <Button 
-            mode="text" 
-            icon="reload" 
-            onPress={() => webViewRef.current?.reload()}
-          >
-            Recargar
-          </Button>
-          
-          <Button 
-            mode="text" 
-            icon="home" 
-            onPress={() => {
-              setUrlInput('https://google.com');
-              setCurrentUrl('https://google.com');
-            }}
-          >
-            Inicio
-          </Button>
+            {currentUrl.startsWith('https') ? 'Seguro' : 'No seguro'}
+          </Chip>
         </View>
 
-        {/* INDICADOR DE CONFIGURACIÓN ACTUAL */}
-        <View style={styles.configBar}>
-          <Text style={styles.configText}>
+        {/* BARRA DE NAVEGACIÓN MEJORADA */}
+        <View style={[styles.navBar, { backgroundColor: darkMode ? '#1e1e1e' : '#f5f5f5' }]}>
+          <View style={styles.navGroup}>
+            <Button 
+              mode="text" 
+              icon="arrow-left" 
+              onPress={() => webViewRef.current?.goBack()}
+              textColor={darkMode ? 'white' : '#4f46e5'}
+            />
+            
+            <Button 
+              mode="text" 
+              icon="arrow-right" 
+              onPress={() => webViewRef.current?.goForward()}
+              textColor={darkMode ? 'white' : '#4f46e5'}
+            />
+            
+            <Button 
+              mode="text" 
+              icon="reload" 
+              onPress={() => webViewRef.current?.reload()}
+              textColor={darkMode ? 'white' : '#4f46e5'}
+            />
+            
+            <Button 
+              mode="text" 
+              icon="home" 
+              onPress={() => {
+                const url = 'https://google.com';
+                setUrlInput(url);
+                setCurrentUrl(url);
+                const updatedTabs = tabs.map(tab => 
+                  tab.id === activeTab ? { ...tab, url: url, title: 'Google' } : tab
+                );
+                setTabs(updatedTabs);
+              }}
+              textColor={darkMode ? 'white' : '#4f46e5'}
+            />
+          </View>
+
+          <View style={styles.navGroup}>
+            <Text style={[styles.modeText, { color: darkMode ? '#bb86fc' : '#4f46e5' }]}>🌙</Text>
+            <Switch value={darkMode} onValueChange={toggleDarkMode} color="#4f46e5" />
+            
+            <Text style={[styles.modeText, { color: darkMode ? '#bb86fc' : '#4f46e5' }]}>🕵️</Text>
+            <Switch value={incognitoMode} onValueChange={toggleIncognitoMode} color="#4f46e5" />
+          </View>
+        </View>
+
+        {/* CONFIGURACIÓN ACTUAL */}
+        <View style={[styles.configBar, { backgroundColor: darkMode ? '#1a1a1a' : '#e3f2fd' }]}>
+          <Text style={[styles.configText, { color: darkMode ? '#fff' : '#1565c0' }]}>
             {selectedUA ? 'User-Agent: ' + userAgents.desktop.concat(userAgents.mobile)
               .find(ua => ua.value === selectedUA)?.name : 'User-Agent: Predeterminado'}
           </Text>
-          <Text style={styles.configText}>
-            Idioma: {languageProfiles[selectedLanguage]}
+          <Text style={[styles.configText, { color: darkMode ? '#fff' : '#1565c0' }]}>
+            Idioma: {languageProfiles[selectedLanguage]} | 
+            {incognitoMode ? ' 🕵️ Incógnito' : ' 🌐 Normal'} |
+            {darkMode ? ' 🌙 Oscuro' : ' ☀️ Claro'}
           </Text>
         </View>
 
@@ -217,11 +381,26 @@ export default function App() {
           source={{ uri: currentUrl }}
           style={styles.webview}
           userAgent={selectedUA}
-          onLoadStart={() => setIsLoading(true)}
-          onLoadEnd={() => setIsLoading(false)}
+          onLoadStart={() => {
+            setIsLoading(true);
+            setProgress(0);
+          }}
+          onLoadProgress={({ nativeEvent }) => {
+            setProgress(nativeEvent.progress);
+          }}
+          onLoadEnd={() => {
+            setIsLoading(false);
+            setProgress(1);
+            // Actualizar título de la pestaña
+            const updatedTabs = tabs.map(tab => 
+              tab.id === activeTab ? { ...tab, title: currentUrl.split('/')[2] || 'Página' } : tab
+            );
+            setTabs(updatedTabs);
+          }}
           onError={(syntheticEvent) => {
             const { nativeEvent } = syntheticEvent;
             console.warn('WebView error: ', nativeEvent);
+            setIsLoading(false);
           }}
           injectedJavaScript={`
             // Inyectar configuración de idioma
@@ -235,31 +414,50 @@ export default function App() {
           `}
         />
 
-        {/* MODAL SELECTOR USER-AGENT */}
+        {/* MODAL SELECTOR USER-AGENT MEJORADO */}
         <Modal
           visible={showUASelector}
           animationType="slide"
           onRequestClose={() => setShowUASelector(false)}
         >
-          <View style={styles.modalContainer}>
-            <Appbar.Header>
-              <Appbar.BackAction onPress={() => setShowUASelector(false)} />
-              <Appbar.Content title="Configurar User-Agent" />
-              <Appbar.Action icon="refresh" onPress={resetSettings} />
+          <View style={[styles.modalContainer, { backgroundColor: darkMode ? '#121212' : 'white' }]}>
+            <Appbar.Header style={{ backgroundColor: darkMode ? '#1e1e1e' : '#4f46e5' }}>
+              <Appbar.BackAction color="white" onPress={() => setShowUASelector(false)} />
+              <Appbar.Content title="Configuración de Privacidad" titleStyle={{ color: 'white' }} />
+              <Appbar.Action icon="cog" color="white" onPress={() => setShowProxyConfig(true)} />
+              <Appbar.Action icon="refresh" color="white" onPress={resetSettings} />
             </Appbar.Header>
 
             <ScrollView style={styles.modalContent}>
               
+              {/* CONFIGURACIÓN RÁPIDA */}
+              <Card style={[styles.sectionCard, { backgroundColor: darkMode ? '#1e1e1e' : 'white' }]}>
+                <Card.Title title="Configuración Rápida" titleStyle={{ color: darkMode ? 'white' : 'black' }} />
+                <Card.Content>
+                  <View style={styles.quickSettings}>
+                    <View style={styles.settingRow}>
+                      <Text style={[styles.settingText, { color: darkMode ? 'white' : 'black' }]}>Modo Oscuro</Text>
+                      <Switch value={darkMode} onValueChange={toggleDarkMode} color="#4f46e5" />
+                    </View>
+                    <View style={styles.settingRow}>
+                      <Text style={[styles.settingText, { color: darkMode ? 'white' : 'black' }]}>Modo Incógnito</Text>
+                      <Switch value={incognitoMode} onValueChange={toggleIncognitoMode} color="#4f46e5" />
+                    </View>
+                  </View>
+                </Card.Content>
+              </Card>
+
               {/* SELECTOR DE IDIOMA */}
-              <Card style={styles.sectionCard}>
-                <Card.Title title="Idioma y Región" />
+              <Card style={[styles.sectionCard, { backgroundColor: darkMode ? '#1e1e1e' : 'white' }]}>
+                <Card.Title title="Idioma y Región" titleStyle={{ color: darkMode ? 'white' : 'black' }} />
                 <Card.Content>
                   {Object.entries(languageProfiles).map(([code, name]) => (
                     <TouchableOpacity
                       key={code}
                       style={[
                         styles.languageItem,
-                        selectedLanguage === code && styles.selectedItem
+                        selectedLanguage === code && styles.selectedItem,
+                        { backgroundColor: darkMode ? '#333' : 'transparent' }
                       ]}
                       onPress={() => applyLanguage(code)}
                     >
@@ -267,23 +465,25 @@ export default function App() {
                         value={code}
                         status={selectedLanguage === code ? 'checked' : 'unchecked'}
                         onPress={() => applyLanguage(code)}
+                        color={darkMode ? '#bb86fc' : '#4f46e5'}
                       />
-                      <Text style={styles.languageText}>{name}</Text>
+                      <Text style={[styles.languageText, { color: darkMode ? 'white' : 'black' }]}>{name}</Text>
                     </TouchableOpacity>
                   ))}
                 </Card.Content>
               </Card>
 
               {/* USER-AGENTS ESCRITORIO */}
-              <Card style={styles.sectionCard}>
-                <Card.Title title="Modo Escritorio" />
+              <Card style={[styles.sectionCard, { backgroundColor: darkMode ? '#1e1e1e' : 'white' }]}>
+                <Card.Title title="Modo Escritorio" titleStyle={{ color: darkMode ? 'white' : 'black' }} />
                 <Card.Content>
                   {userAgents.desktop.map((ua, index) => (
                     <TouchableOpacity
                       key={index}
                       style={[
                         styles.uaItem,
-                        selectedUA === ua.value && styles.selectedItem
+                        selectedUA === ua.value && styles.selectedItem,
+                        { backgroundColor: darkMode ? '#333' : 'transparent' }
                       ]}
                       onPress={() => applyUserAgent(ua.value)}
                     >
@@ -291,10 +491,11 @@ export default function App() {
                         value={ua.value}
                         status={selectedUA === ua.value ? 'checked' : 'unchecked'}
                         onPress={() => applyUserAgent(ua.value)}
+                        color={darkMode ? '#bb86fc' : '#4f46e5'}
                       />
                       <View style={styles.uaInfo}>
-                        <Text style={styles.uaName}>{ua.name}</Text>
-                        <Text style={styles.uaResolution}>{ua.resolution}</Text>
+                        <Text style={[styles.uaName, { color: darkMode ? 'white' : 'black' }]}>{ua.name}</Text>
+                        <Text style={[styles.uaResolution, { color: darkMode ? '#ccc' : '#666' }]}>{ua.resolution}</Text>
                       </View>
                     </TouchableOpacity>
                   ))}
@@ -302,15 +503,16 @@ export default function App() {
               </Card>
 
               {/* USER-AGENTS MÓVIL */}
-              <Card style={styles.sectionCard}>
-                <Card.Title title="Modo Móvil" />
+              <Card style={[styles.sectionCard, { backgroundColor: darkMode ? '#1e1e1e' : 'white' }]}>
+                <Card.Title title="Modo Móvil" titleStyle={{ color: darkMode ? 'white' : 'black' }} />
                 <Card.Content>
                   {userAgents.mobile.map((ua, index) => (
                     <TouchableOpacity
                       key={index}
                       style={[
                         styles.uaItem,
-                        selectedUA === ua.value && styles.selectedItem
+                        selectedUA === ua.value && styles.selectedItem,
+                        { backgroundColor: darkMode ? '#333' : 'transparent' }
                       ]}
                       onPress={() => applyUserAgent(ua.value)}
                     >
@@ -318,26 +520,81 @@ export default function App() {
                         value={ua.value}
                         status={selectedUA === ua.value ? 'checked' : 'unchecked'}
                         onPress={() => applyUserAgent(ua.value)}
+                        color={darkMode ? '#bb86fc' : '#4f46e5'}
                       />
                       <View style={styles.uaInfo}>
-                        <Text style={styles.uaName}>{ua.name}</Text>
-                        <Text style={styles.uaResolution}>{ua.resolution}</Text>
+                        <Text style={[styles.uaName, { color: darkMode ? 'white' : 'black' }]}>{ua.name}</Text>
+                        <Text style={[styles.uaResolution, { color: darkMode ? '#ccc' : '#666' }]}>{ua.resolution}</Text>
                       </View>
                     </TouchableOpacity>
                   ))}
                 </Card.Content>
               </Card>
 
-              {/* BOTÓN RESET */}
-              <Button 
-                mode="outlined" 
-                style={styles.resetButton}
-                onPress={resetSettings}
-                icon="refresh"
-              >
-                Restablecer Configuración
-              </Button>
+            </ScrollView>
+          </View>
+        </Modal>
 
+        {/* MODAL CONFIGURACIÓN PROXY */}
+        <Modal visible={showProxyConfig} animationType="slide">
+          <View style={[styles.modalContainer, { backgroundColor: darkMode ? '#121212' : 'white' }]}>
+            <Appbar.Header style={{ backgroundColor: darkMode ? '#1e1e1e' : '#4f46e5' }}>
+              <Appbar.BackAction color="white" onPress={() => setShowProxyConfig(false)} />
+              <Appbar.Content title="Configuración Proxy" titleStyle={{ color: 'white' }} />
+            </Appbar.Header>
+
+            <ScrollView style={styles.modalContent}>
+              <Card style={[styles.sectionCard, { backgroundColor: darkMode ? '#1e1e1e' : 'white' }]}>
+                <Card.Title title="Configuración de Proxy" titleStyle={{ color: darkMode ? 'white' : 'black' }} />
+                <Card.Content>
+                  <Text style={[styles.settingText, { color: darkMode ? 'white' : 'black' }]}>
+                    Host del Proxy:
+                  </Text>
+                  <TextInput
+                    value={proxyConfig.host}
+                    onChangeText={(text) => setProxyConfig({...proxyConfig, host: text})}
+                    placeholder="ej: 192.168.1.1"
+                    placeholderTextColor={darkMode ? '#888' : '#666'}
+                    mode="outlined"
+                    style={styles.proxyInput}
+                    theme={{ colors: { primary: darkMode ? '#bb86fc' : '#4f46e5' } }}
+                  />
+                  
+                  <Text style={[styles.settingText, { color: darkMode ? 'white' : 'black' }]}>
+                    Puerto:
+                  </Text>
+                  <TextInput
+                    value={proxyConfig.port}
+                    onChangeText={(text) => setProxyConfig({...proxyConfig, port: text})}
+                    placeholder="ej: 8080"
+                    placeholderTextColor={darkMode ? '#888' : '#666'}
+                    mode="outlined"
+                    keyboardType="numeric"
+                    style={styles.proxyInput}
+                    theme={{ colors: { primary: darkMode ? '#bb86fc' : '#4f46e5' } }}
+                  />
+                  
+                  <View style={styles.settingRow}>
+                    <Text style={[styles.settingText, { color: darkMode ? 'white' : 'black' }]}>
+                      Habilitar Proxy
+                    </Text>
+                    <Switch 
+                      value={proxyConfig.enabled} 
+                      onValueChange={(value) => setProxyConfig({...proxyConfig, enabled: value})}
+                      color="#4f46e5"
+                    />
+                  </View>
+                  
+                  <Button 
+                    mode="contained" 
+                    onPress={saveProxyConfig}
+                    style={styles.saveButton}
+                    buttonColor={darkMode ? '#bb86fc' : '#4f46e5'}
+                  >
+                    Guardar Configuración
+                  </Button>
+                </Card.Content>
+              </Card>
             </ScrollView>
           </View>
         </Modal>
@@ -350,28 +607,75 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
   },
   urlInput: {
     flex: 1,
     marginHorizontal: 10,
     height: 40,
   },
+  progressBar: {
+    height: 2,
+  },
+  tabsContainer: {
+    maxHeight: 45,
+  },
+  tab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    margin: 2,
+    borderRadius: 5,
+    minWidth: 120,
+    maxWidth: 200,
+  },
+  activeTab: {
+    // El color se maneja dinámicamente
+  },
+  tabTitle: {
+    fontSize: 12,
+    flex: 1,
+  },
+  closeTab: {
+    marginLeft: 5,
+    padding: 2,
+  },
+  closeText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  urlBar: {
+    padding: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  currentUrl: {
+    fontSize: 12,
+    flex: 1,
+  },
+  securityChip: {
+    height: 25,
+  },
   navBar: {
     flexDirection: 'row',
-    backgroundColor: '#f5f5f5',
-    padding: 5,
-    justifyContent: 'space-around',
+    padding: 8,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  navGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  modeText: {
+    marginHorizontal: 5,
+    fontSize: 16,
   },
   configBar: {
-    backgroundColor: '#e3f2fd',
     padding: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#bbdefb',
   },
   configText: {
-    fontSize: 12,
-    color: '#1565c0',
+    fontSize: 11,
     fontWeight: '500',
   },
   webview: {
@@ -379,7 +683,6 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: 'white',
   },
   modalContent: {
     flex: 1,
@@ -387,6 +690,18 @@ const styles = StyleSheet.create({
   },
   sectionCard: {
     marginBottom: 15,
+  },
+  quickSettings: {
+    marginVertical: 10,
+  },
+  settingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  settingText: {
+    fontSize: 16,
   },
   languageItem: {
     flexDirection: 'row',
@@ -403,7 +718,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   selectedItem: {
-    backgroundColor: '#e3f2fd',
+    // El color se maneja dinámicamente
   },
   languageText: {
     fontSize: 16,
@@ -419,10 +734,11 @@ const styles = StyleSheet.create({
   },
   uaResolution: {
     fontSize: 12,
-    color: '#666',
   },
-  resetButton: {
-    margin: 15,
-    marginTop: 5,
+  proxyInput: {
+    marginVertical: 8,
+  },
+  saveButton: {
+    marginTop: 15,
   },
 });
