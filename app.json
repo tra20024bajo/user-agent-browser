@@ -30,6 +30,16 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "sdkVersion": "49.0.0",
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "TU_PROJECT_ID_AQUI"
+      }
     }
   }
 }
