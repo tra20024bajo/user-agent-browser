@@ -1,33 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Modal, TouchableOpacity, Text } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { Appbar, TextInput, Button, Card, RadioButton, List, Provider as PaperProvider, Chip, IconButton } from 'react-native-paper';
+import { Appbar, TextInput, Button, Card, RadioButton, List, Provider as PaperProvider } from 'react-native-paper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function App() {
-  // ==================== ESTADO DE PESTAÑAS ====================
-  const [tabs, setTabs] = useState([
-    { 
-      id: 1, 
-      url: 'https://google.com', 
-      title: 'Nueva pestaña',
-      loading: false 
-    }
-  ]);
-  const [activeTabId, setActiveTabId] = useState(1);
-  const [showTabManager, setShowTabManager] = useState(false);
-  
-  // Refs para WebViews
-  const webViewRefs = useRef({});
-
-  // ==================== ESTADO ORIGINAL ====================
+  const webViewRef = useRef(null);
+  const [currentUrl, setCurrentUrl] = useState('https://google.com');
   const [urlInput, setUrlInput] = useState('https://google.com');
   const [showUASelector, setShowUASelector] = useState(false);
   const [selectedUA, setSelectedUA] = useState('');
   const [selectedLanguage, setSelectedLanguage] = useState('en-US');
   const [isLoading, setIsLoading] = useState(false);
 
-  // USER-AGENTS database (original)
+  // USER-AGENTS database (de tu extensión)
   const userAgents = {
     desktop: [
       { 
@@ -80,7 +66,7 @@ export default function App() {
     ]
   };
 
-  // IDIOMAS (original)
+  // IDIOMAS (de tu extensión)
   const languageProfiles = {
     "en-US": "English (US)",
     "es-ES": "Español (ES)", 
@@ -90,56 +76,7 @@ export default function App() {
     "pt-BR": "Português (BR)"
   };
 
-  // ==================== FUNCIONES DE PESTAÑAS ====================
-  const createNewTab = () => {
-    const newTabId = Date.now();
-    const newTab = {
-      id: newTabId,
-      url: 'https://google.com',
-      title: 'Nueva pestaña',
-      loading: false
-    };
-    
-    setTabs([...tabs, newTab]);
-    setActiveTabId(newTabId);
-    setUrlInput('https://google.com');
-    setShowTabManager(false);
-  };
-
-  const closeTab = (tabId) => {
-    if (tabs.length === 1) {
-      // No permitir cerrar la última pestaña, mejor resetearla
-      setTabs([{
-        id: Date.now(),
-        url: 'https://google.com',
-        title: 'Nueva pestaña',
-        loading: false
-      }]);
-      setActiveTabId(tabs[0].id);
-      setUrlInput('https://google.com');
-      return;
-    }
-    
-    const newTabs = tabs.filter(tab => tab.id !== tabId);
-    setTabs(newTabs);
-    
-    if (activeTabId === tabId) {
-      setActiveTabId(newTabs[0].id);
-      setUrlInput(newTabs[0].url);
-    }
-    
-    // Limpiar referencia
-    delete webViewRefs.current[tabId];
-  };
-
-  const switchTab = (tabId) => {
-    const tab = tabs.find(t => t.id === tabId);
-    setActiveTabId(tabId);
-    setUrlInput(tab.url);
-    setShowTabManager(false);
-  };
-
-  // ==================== FUNCIONES ORIGINALES MODIFICADAS ====================
+  // Cargar configuración guardada
   useEffect(() => {
     loadSavedSettings();
   }, []);
@@ -155,65 +92,37 @@ export default function App() {
     }
   };
 
-  // Navegar a URL (actualizada para pestañas)
+  // Navegar a URL
   const navigate = () => {
     let url = urlInput.trim();
     if (!url.startsWith('http')) {
       url = 'https://' + url;
     }
-    
-    setTabs(tabs.map(tab => 
-      tab.id === activeTabId 
-        ? { ...tab, url, title: 'Cargando...' }
-        : tab
-    ));
+    setCurrentUrl(url);
+    setUrlInput(url);
   };
 
-  // Actualizar URL mientras navegas
-  const handleNavigationStateChange = (navState, tabId) => {
-    const { url, title } = navState;
-    
-    setTabs(tabs.map(tab => 
-      tab.id === tabId 
-        ? { 
-            ...tab, 
-            url: url || tab.url, 
-            title: title || tab.title,
-            loading: navState.loading 
-          }
-        : tab
-    ));
-    
-    if (tabId === activeTabId) {
-      setUrlInput(url || '');
-    }
-  };
-
-  // Aplicar User-Agent (actualizada para todas las pestañas)
+  // Aplicar User-Agent
   const applyUserAgent = async (ua) => {
     setSelectedUA(ua);
     await AsyncStorage.setItem('selectedUA', ua);
     setShowUASelector(false);
     
-    // Recargar todas las pestañas con nuevo User-Agent
-    Object.values(webViewRefs.current).forEach(webViewRef => {
-      if (webViewRef) {
-        webViewRef.reload();
-      }
-    });
+    // Recargar página con nuevo User-Agent
+    if (webViewRef.current) {
+      webViewRef.current.reload();
+    }
   };
 
-  // Aplicar Idioma (actualizada para todas las pestañas)
+  // Aplicar Idioma
   const applyLanguage = async (lang) => {
     setSelectedLanguage(lang);
     await AsyncStorage.setItem('selectedLanguage', lang);
     
-    // Recargar todas las pestañas con nuevo idioma
-    Object.values(webViewRefs.current).forEach(webViewRef => {
-      if (webViewRef) {
-        webViewRef.reload();
-      }
-    });
+    // Recargar página con nuevo idioma
+    if (webViewRef.current) {
+      webViewRef.current.reload();
+    }
   };
 
   // Reset configuración
@@ -221,22 +130,16 @@ export default function App() {
     setSelectedUA('');
     setSelectedLanguage('en-US');
     await AsyncStorage.multiRemove(['selectedUA', 'selectedLanguage']);
-    
-    Object.values(webViewRefs.current).forEach(webViewRef => {
-      if (webViewRef) {
-        webViewRef.reload();
-      }
-    });
+    if (webViewRef.current) {
+      webViewRef.current.reload();
+    }
   };
-
-  // Pestaña activa
-  const activeTab = tabs.find(tab => tab.id === activeTabId);
 
   return (
     <PaperProvider>
       <View style={styles.container}>
         
-        {/* HEADER MEJORADO CON PESTAÑAS */}
+        {/* HEADER CON BUSCADOR */}
         <Appbar.Header>
           <Appbar.Action 
             icon="menu" 
@@ -257,121 +160,14 @@ export default function App() {
             icon="magnify" 
             onPress={navigate} 
           />
-          
-          {/* CONTADOR DE PESTAÑAS */}
-          <Chip 
-            style={styles.tabChip}
-            onPress={() => setShowTabManager(true)}
-          >
-            {tabs.length}
-          </Chip>
         </Appbar.Header>
-
-        {/* BARRA DE PESTAÑAS ACTIVAS */}
-        <ScrollView horizontal style={styles.tabBar}>
-          {tabs.map(tab => (
-            <TouchableOpacity
-              key={tab.id}
-              style={[
-                styles.tab,
-                tab.id === activeTabId && styles.activeTab
-              ]}
-              onPress={() => switchTab(tab.id)}
-              onLongPress={() => closeTab(tab.id)}
-            >
-              <Text 
-                style={[
-                  styles.tabText,
-                  tab.id === activeTabId && styles.activeTabText
-                ]}
-                numberOfLines={1}
-              >
-                {tab.title}
-              </Text>
-              {tabs.length > 1 && (
-                <IconButton
-                  icon="close"
-                  size={14}
-                  onPress={() => closeTab(tab.id)}
-                  style={styles.tabClose}
-                />
-              )}
-            </TouchableOpacity>
-          ))}
-          
-          {/* BOTÓN NUEVA PESTAÑA */}
-          <IconButton
-            icon="plus"
-            size={20}
-            onPress={createNewTab}
-            style={styles.newTabButton}
-          />
-        </ScrollView>
-
-        {/* INDICADOR DE CONFIGURACIÓN ACTUAL */}
-        <View style={styles.configBar}>
-          <Text style={styles.configText}>
-            {selectedUA ? 'User-Agent: ' + userAgents.desktop.concat(userAgents.mobile)
-              .find(ua => ua.value === selectedUA)?.name : 'User-Agent: Predeterminado'}
-          </Text>
-          <Text style={styles.configText}>
-            Idioma: {languageProfiles[selectedLanguage]} | Pestañas: {tabs.length}
-          </Text>
-        </View>
-
-        {/* NAVEGADOR WEBVIEW CON PESTAÑAS */}
-        {tabs.map(tab => (
-          <WebView
-            key={tab.id}
-            ref={(ref) => {
-              if (ref) webViewRefs.current[tab.id] = ref;
-            }}
-            source={{ uri: tab.url }}
-            style={[
-              styles.webview,
-              { display: tab.id === activeTabId ? 'flex' : 'none' }
-            ]}
-            userAgent={selectedUA}
-            onLoadStart={() => setIsLoading(true)}
-            onLoadEnd={() => setIsLoading(false)}
-            onNavigationStateChange={(navState) => 
-              handleNavigationStateChange(navState, tab.id)
-            }
-            onError={(syntheticEvent) => {
-              const { nativeEvent } = syntheticEvent;
-              console.warn('WebView error: ', nativeEvent);
-            }}
-            javaScriptEnabled={true}
-            domStorageEnabled={false} // ✅ Deshabilitar almacenamiento
-            cacheEnabled={false} // ✅ Deshabilitar cache
-            thirdPartyCookiesEnabled={false} // ✅ Deshabilitar cookies de terceros
-            sharedCookiesEnabled={false} // ✅ Deshabilitar cookies compartidas
-            injectedJavaScript={`
-              // Inyectar configuración de idioma
-              Object.defineProperty(navigator, 'language', {
-                get: function() { return '${selectedLanguage}'; }
-              });
-              Object.defineProperty(navigator, 'languages', {
-                get: function() { return ['${selectedLanguage}', '${selectedLanguage.split('-')[0]}', 'en']; }
-              });
-              
-              // Limpiar cualquier dato existente
-              try {
-                if (typeof localStorage !== 'undefined') localStorage.clear();
-                if (typeof sessionStorage !== 'undefined') sessionStorage.clear();
-              } catch(e) {}
-              
-              true;
-            `}
-          />
-        ))}
 
         {/* BARRA DE NAVEGACIÓN */}
         <View style={styles.navBar}>
           <Button 
             mode="text" 
             icon="arrow-left" 
-            onPress={() => webViewRefs.current[activeTabId]?.goBack()}
+            onPress={() => webViewRef.current?.goBack()}
           >
             Atrás
           </Button>
@@ -379,7 +175,7 @@ export default function App() {
           <Button 
             mode="text" 
             icon="arrow-right" 
-            onPress={() => webViewRefs.current[activeTabId]?.goForward()}
+            onPress={() => webViewRef.current?.goForward()}
           >
             Adelante
           </Button>
@@ -387,7 +183,7 @@ export default function App() {
           <Button 
             mode="text" 
             icon="reload" 
-            onPress={() => webViewRefs.current[activeTabId]?.reload()}
+            onPress={() => webViewRef.current?.reload()}
           >
             Recargar
           </Button>
@@ -397,26 +193,49 @@ export default function App() {
             icon="home" 
             onPress={() => {
               setUrlInput('https://google.com');
-              setTabs(tabs.map(tab => 
-                tab.id === activeTabId 
-                  ? { ...tab, url: 'https://google.com', title: 'Google' }
-                  : tab
-              ));
+              setCurrentUrl('https://google.com');
             }}
           >
             Inicio
           </Button>
-          
-          <Button 
-            mode="text" 
-            icon="plus" 
-            onPress={createNewTab}
-          >
-            Nueva
-          </Button>
         </View>
 
-        {/* MODAL SELECTOR USER-AGENT (ORIGINAL) */}
+        {/* INDICADOR DE CONFIGURACIÓN ACTUAL */}
+        <View style={styles.configBar}>
+          <Text style={styles.configText}>
+            {selectedUA ? 'User-Agent: ' + userAgents.desktop.concat(userAgents.mobile)
+              .find(ua => ua.value === selectedUA)?.name : 'User-Agent: Predeterminado'}
+          </Text>
+          <Text style={styles.configText}>
+            Idioma: {languageProfiles[selectedLanguage]}
+          </Text>
+        </View>
+
+        {/* NAVEGADOR WEBVIEW */}
+        <WebView
+          ref={webViewRef}
+          source={{ uri: currentUrl }}
+          style={styles.webview}
+          userAgent={selectedUA}
+          onLoadStart={() => setIsLoading(true)}
+          onLoadEnd={() => setIsLoading(false)}
+          onError={(syntheticEvent) => {
+            const { nativeEvent } = syntheticEvent;
+            console.warn('WebView error: ', nativeEvent);
+          }}
+          injectedJavaScript={`
+            // Inyectar configuración de idioma
+            Object.defineProperty(navigator, 'language', {
+              get: function() { return '${selectedLanguage}'; }
+            });
+            Object.defineProperty(navigator, 'languages', {
+              get: function() { return ['${selectedLanguage}', '${selectedLanguage.split('-')[0]}', 'en']; }
+            });
+            true;
+          `}
+        />
+
+        {/* MODAL SELECTOR USER-AGENT */}
         <Modal
           visible={showUASelector}
           animationType="slide"
@@ -537,55 +356,6 @@ const styles = StyleSheet.create({
     flex: 1,
     marginHorizontal: 10,
     height: 40,
-  },
-  tabChip: {
-    marginRight: 8,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-  },
-  tabBar: {
-    flexDirection: 'row',
-    backgroundColor: '#f8f8f8',
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-    maxHeight: 45,
-  },
-  tab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginHorizontal: 2,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    minWidth: 100,
-    maxWidth: 200,
-  },
-  activeTab: {
-    backgroundColor: '#1976D2',
-    borderColor: '#1565C0',
-  },
-  tabText: {
-    fontSize: 12,
-    color: '#333',
-    flex: 1,
-  },
-  activeTabText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  tabClose: {
-    margin: 0,
-    padding: 0,
-    marginLeft: 4,
-  },
-  newTabButton: {
-    margin: 0,
-    padding: 0,
-    marginLeft: 4,
   },
   navBar: {
     flexDirection: 'row',
